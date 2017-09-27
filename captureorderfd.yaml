@@ -26,7 +26,7 @@ spec:
     spec:
       containers:
       - name: captureorderfd
-        image: cadcontainerregistry.azurecr.io/go_order_sb
+        image: cadcontainerregistry.azurecr.io/captureorderfd
         env:
         - name: DATABASE
           value: "k8orders"
