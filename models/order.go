@@ -39,9 +39,12 @@ var isAzure = true
 var hosts string
 
 var insightskey = os.Getenv("INSIGHTSKEY")
-var eventURL = os.Getenv("EVENTURL")
 var eventPolicyName = os.Getenv("EVENTPOLICYNAME")
 var eventPolicyKey = os.Getenv("EVENTPOLICYKEY")
+var partitionKey = strings.TrimSpace(os.Getenv("PARTITIONKEY"))
+var eventURL = os.Getenv("EVENTURL") + "/messages"
+
+var eventURLWithPartition = os.Getenv("EVENTURL") + "/partitions/" + partitionKey + "/messages"
 
 // Order represents the order json
 type Order struct {
@@ -67,7 +70,9 @@ func AddOrder(order Order) (orderId string) {
 func AddOrderToMongoDB(order Order) (orderId string) {
 
 	NewOrderID := bson.NewObjectId()
+
 	order.ID = NewOrderID.Hex()
+
 	order.Status = "Open"
 	if order.Source == "" || order.Source == "string" {
 		order.Source = os.Getenv("SOURCE")
@@ -111,6 +116,7 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 
 	// insert Document in collection
 	err = collection.Insert(order)
+	log.Println("_id:", order)
 
 	if err != nil {
 		log.Fatal("Problem inserting data: ", err)
@@ -136,12 +142,17 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 // AddOrderToEventHub adds it to an event hub
 func AddOrderToEventHub(orderId string) {
 
-	t := time.Now()
-	hostname, err := os.Hostname()
-	SaS := createSharedAccessToken(strings.TrimSpace(eventURL), strings.TrimSpace(eventPolicyName), strings.TrimSpace(eventPolicyKey))
+	//	t := time.Now()
+	//	hostname, err := os.Hostname()
+	log.Println("SaS pre ", eventURLWithPartition, eventPolicyName, eventPolicyKey)
+	SaS := createSharedAccessToken(strings.TrimSpace(eventURLWithPartition), strings.TrimSpace(eventPolicyName), strings.TrimSpace(eventPolicyKey))
+	log.Println("SaS post ", SaS)
+
+	log.Println("evenurlwith part  ", eventURLWithPartition)
 
 	tr := &http.Transport{DisableKeepAlives: false}
-	req, _ := http.NewRequest("POST", eventURL, strings.NewReader("{'order':"+"'"+orderId+"', 'source':"+"'"+os.Getenv("SOURCE")+"', 'time':"+"'"+t.String()+"'"+", 'status':"+"'"+"Open"+"'"+", 'hostname':"+"'"+hostname+"'}"))
+	//req, _ := http.NewRequest("POST", eventURL, strings.NewReader("{'order':"+"'"+orderId+"', 'source':"+"'"+os.Getenv("SOURCE")+"', 'time':"+"'"+t.String()+"'"+", 'status':"+"'"+"Open"+"'"+", 'hostname':"+"'"+hostname+"'}"))
+	req, _ := http.NewRequest("POST", eventURLWithPartition, strings.NewReader("{'order':"+"'"+orderId+"'}"))
 	req.Header.Set("Authorization", SaS)
 	req.Close = false
 

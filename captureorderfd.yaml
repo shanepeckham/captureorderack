@@ -1,0 +1,50 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: captureorderfd0
+  labels:
+    app: captureorderfd0
+spec:
+  type: LoadBalancer
+  ports:
+  - port: 8081
+    targetPort: 8081
+  selector:
+    run: captureorderfd
+---
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: captureorderfd0
+spec:
+  replicas: 3
+  template:
+    metadata:
+      labels:
+        run: captureorderfd0
+        app: captureorderfd0
+    spec:
+      containers:
+      - name: captureorderfd
+        image: cadcontainerregistry.azurecr.io/go_order_sb
+        env:
+        - name: DATABASE
+          value: "k8orders"
+        - name: PASSWORD
+          value: "QyzzuAhEuCybiGDxI1o0ai4myLE3No3cBQS15n72xBEXIGNBbNnCztmRLLz2FnNSPtJdQzUzumuqwdFY7FKr2w=="
+        - name: INSIGHTSKEY
+          value: "23c6b1ec-ca92-4083-86b6-eba851af9032"
+        - name: SOURCE
+          value: "K8"
+        - name: EVENTURL
+          value: "https://coffee.servicebus.windows.net/orders"
+        - name: EVENTPOLICYNAME
+          value: "RootManageSharedAccessKey"
+        - name: EVENTPOLICYKEY
+          value: "2dXz/klqlCd2YLEaUp1D91p2q1bgaW9F/ZJSt39yT3I="
+        - name: PARTITIONKEY
+          value: "0"
+        ports:
+          - containerPort: 8081
+      imagePullSecrets:
+        - name: cadcontainerregistry
