@@ -1,10 +1,10 @@
 // @APIVersion 1.0.0
 // @Title Capture Order
 // @Description Capture Order
-// @Contact astaxie@gmail.com
-// @TermsOfServiceUrl http://beego.me/
-// @License Apache 2.0
-// @LicenseUrl http://www.apache.org/licenses/LICENSE-2.0.html
+// @Contact shanepec@microsoft.com
+// @TermsOfServiceUrl
+// @License MIT
+// @LicenseUrl
 package routers
 
 import (

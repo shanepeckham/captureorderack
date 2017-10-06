@@ -53,7 +53,7 @@ type Order struct {
 	PreferredLanguage string  `required:"false" description:"Preferred Language of the customer"`
 	Product           string  `required:"false" description:"Product ordered by the customer"`
 	Total             float64 `required:"false" description:"Order total"`
-	Source            string  `required:"false" description:"Source channel e.g. App Service, Container instance, K8 cluster etc"`
+	Source            string  `required:"false" description:"Source backend e.g. App Service, Container instance, K8 cluster etc"`
 	Status            string  `required:"true" description:"Order Status"`
 }
 
@@ -134,16 +134,14 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 
 	// Now let's place this on the eventhub
 	if eventURL != "" {
-		AddOrderToEventHub(order.ID)
+		AddOrderToEventHub(order.ID, order.Source)
 	}
 	return order.ID
 }
 
 // AddOrderToEventHub adds it to an event hub
-func AddOrderToEventHub(orderId string) {
+func AddOrderToEventHub(orderId string, orderSource string) {
 
-	//	t := time.Now()
-	//	hostname, err := os.Hostname()
 	log.Println("SaS pre ", eventURLWithPartition, eventPolicyName, eventPolicyKey)
 	SaS := createSharedAccessToken(strings.TrimSpace(eventURLWithPartition), strings.TrimSpace(eventPolicyName), strings.TrimSpace(eventPolicyKey))
 	log.Println("SaS post ", SaS)
@@ -152,7 +150,7 @@ func AddOrderToEventHub(orderId string) {
 
 	tr := &http.Transport{DisableKeepAlives: false}
 	//req, _ := http.NewRequest("POST", eventURL, strings.NewReader("{'order':"+"'"+orderId+"', 'source':"+"'"+os.Getenv("SOURCE")+"', 'time':"+"'"+t.String()+"'"+", 'status':"+"'"+"Open"+"'"+", 'hostname':"+"'"+hostname+"'}"))
-	req, _ := http.NewRequest("POST", eventURLWithPartition, strings.NewReader("{'order':"+"'"+orderId+"'}"))
+	req, _ := http.NewRequest("POST", eventURLWithPartition, strings.NewReader("{'order':"+"'"+orderId+"', 'source':"+"'"+orderSource+"'}"))
 	req.Header.Set("Authorization", SaS)
 	req.Close = false
 

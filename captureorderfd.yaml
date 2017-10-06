@@ -4,18 +4,20 @@ metadata:
   name: captureorderfd0
   labels:
     app: captureorderfd0
+  namespace: fd
 spec:
   type: LoadBalancer
   ports:
-  - port: 8081
-    targetPort: 8081
+  - port: 8080
+    targetPort: 8080
   selector:
-    run: captureorderfd
+    run: captureorderfd0
 ---
 apiVersion: extensions/v1beta1
 kind: Deployment
 metadata:
   name: captureorderfd0
+  namespace: fd
 spec:
   replicas: 3
   template:
@@ -23,6 +25,7 @@ spec:
       labels:
         run: captureorderfd0
         app: captureorderfd0
+        namespace: fd
     spec:
       containers:
       - name: captureorderfd
@@ -45,6 +48,6 @@ spec:
         - name: PARTITIONKEY
           value: "0"
         ports:
-          - containerPort: 8081
+          - containerPort: 8080
       imagePullSecrets:
         - name: cadcontainerregistry

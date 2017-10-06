@@ -3,12 +3,10 @@ info:
   title: Capture Order
   description: Capture Order
   version: 1.0.0
-  termsOfService: http://beego.me/
   contact:
-    email: astaxie@gmail.com
+    email: shanepec@microsoft.com
   license:
-    name: Apache 2.0
-    url: http://www.apache.org/licenses/LICENSE-2.0.html
+    name: MIT
 basePath: /v1
 paths:
   /order/:
@@ -55,7 +53,7 @@ definitions:
         description: Product ordered by the customer
         type: string
       Source:
-        description: Source channel e.g. App Service, Container instance, K8 cluster
+        description: Source backend e.g. App Service, Container instance, K8 cluster
           etc
         type: string
       Status:

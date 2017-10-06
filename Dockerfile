@@ -25,7 +25,7 @@ ADD . /go/src/captureorderfd
 WORKDIR /go/src/captureorderfd
 
 # Expose the application on port 8080
-EXPOSE 8081
+EXPOSE 8080
 
 # Set the entry point of the container to the bee command that runs the
 # application and watches for changes
