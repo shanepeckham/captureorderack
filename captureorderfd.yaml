@@ -32,19 +32,19 @@ spec:
         image: cadcontainerregistry.azurecr.io/captureorderfd
         env:
         - name: DATABASE
-          value: "k8orders"
+          value: ""
         - name: PASSWORD
-          value: "QyzzuAhEuCybiGDxI1o0ai4myLE3No3cBQS15n72xBEXIGNBbNnCztmRLLz2FnNSPtJdQzUzumuqwdFY7FKr2w=="
+          value: ""
         - name: INSIGHTSKEY
-          value: "23c6b1ec-ca92-4083-86b6-eba851af9032"
+          value: ""
         - name: SOURCE
-          value: "K8"
+          value: ""
         - name: EVENTURL
-          value: "https://coffee.servicebus.windows.net/orders"
+          value: ""
         - name: EVENTPOLICYNAME
-          value: "RootManageSharedAccessKey"
+          value: ""
         - name: EVENTPOLICYKEY
-          value: "2dXz/klqlCd2YLEaUp1D91p2q1bgaW9F/ZJSt39yT3I="
+          value: ""
         - name: PARTITIONKEY
           value: "0"
         ports:
