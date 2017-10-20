@@ -1,11 +1,14 @@
-FROM golang:latest
+FROM golang:alpine
 
 # Install beego and the bee dev tool
+RUN apk update && apk upgrade && \
+    apk add --no-cache bash git openssh
+#RUN go get -u -v code.cloudfoundry.org/clock
 RUN go get -u -v github.com/astaxie/beego
 RUN go get -u -v github.com/beego/bee
-RUN go get -u -v github.com/Microsoft/ApplicationInsights-Go/appinsights
 RUN go get -u -v gopkg.in/mgo.v2
 RUN go get -u -v github.com/Azure/go-autorest/autorest/utils
+RUN go get -u -v github.com/Microsoft/ApplicationInsights-Go/appinsights
 
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:$PATH

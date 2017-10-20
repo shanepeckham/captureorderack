@@ -1,0 +1,23 @@
+FROM scratch
+
+ENV GOPATH /go
+ENV PATH $GOPATH/bin:$PATH
+ENV DATABASE=
+ENV PASSWORD=
+ENV INSIGHTSKEY=
+ENV SOURCE=
+ENV EVENTURL=
+ENV EVENTPOLICYNAME=
+ENV EVENTPOLICYKEY=
+ENV PARTITIONKEY=
+
+WORKDIR /go/src/captureorderfd
+
+COPY --from=shanepeckham/captureorderfdscratch /go/src/captureorderfd /go/src/captureorderfd
+
+# Expose the application on port 8080
+EXPOSE 8080
+
+# Set the entry point of the container to the bee command that runs the
+# application and watches for changes
+CMD ["bee", "run"]
