@@ -29,7 +29,7 @@ spec:
     spec:
       containers:
       - name: captureorderfd
-        image: cadcontainerregistry.azurecr.io/captureorderfd
+        image: 
         env:
         - name: DATABASE
           value: ""
@@ -46,7 +46,7 @@ spec:
         - name: EVENTPOLICYKEY
           value: ""
         - name: PARTITIONKEY
-          value: "0"
+          value: ""
         ports:
           - containerPort: 8080
       imagePullSecrets:
