@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"net"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -76,10 +77,10 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	}
 
 	database = "k8orders"
-	password = ""   //V2
-	isAzure = false // REMOVE this for V2 tag and for cosmos to work
+	password = "" //V2
+	//isAzure = false // REMOVE this for V2 tag and for cosmos to work
 
-	/* //Now we check if this mongo or cosmos // V2
+	//Now we check if this mongo or cosmos // V2
 	if strings.Contains(mongoURL, "?ssl=true") {
 		isAzure = true
 
@@ -97,7 +98,7 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 		password = st[co+1:]
 		log.Print("db ", database, " pwd ", password)
 	}
-	// V2s */
+	// V2s
 
 	dialInfo := &mgo.DialInfo{
 		Addrs:    []string{fmt.Sprintf("%s.documents.azure.com:10255", database)}, // Get HOST + PORT
