@@ -29,16 +29,19 @@ var (
 
 var username string
 var address []string
-var isAzure = true
+var isAzure bool
 var session *mgo.Session
 var serr error
 
 var hosts string
+var db string
 
-var insightskey = os.Getenv("INSIGHTSKEY")
+var insightskey = "23c6b1ec-ca92-4083-86b6-eba851af9032"
+
 var rabbitMQURL = os.Getenv("RABBITMQHOST")
 var partitionKey = strings.TrimSpace(os.Getenv("PARTITIONKEY"))
 var mongoURL = os.Getenv("MONGOHOST")
+var teamname = os.Getenv("TEAMNAME")
 
 // Order represents the order json
 type Order struct {
@@ -100,6 +103,8 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	}
 	// V2s
 
+	log.Print(mongoURL, isAzure)
+
 	dialInfo := &mgo.DialInfo{
 		Addrs:    []string{fmt.Sprintf("%s.documents.azure.com:10255", database)}, // Get HOST + PORT
 		Timeout:  60 * time.Second,
@@ -113,12 +118,14 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	//V2
 	// Create a session which maintains a pool of socket connections
 	// to our MongoDB.
-	if isAzure {
+	if isAzure == true {
 		session, serr = mgo.DialWithInfo(dialInfo)
 		log.Println("Writing to CosmosDB")
+		db = "CosmosDB"
 	} else {
 		session, serr = mgo.Dial(mongoURL)
 		log.Println("Writing to MongoDB")
+		db = "MongoDB"
 	}
 
 	if serr != nil {
@@ -152,12 +159,12 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	if insightskey != "" {
 		t := time.Now()
 		client := appinsights.NewTelemetryClient(insightskey)
-		client.TrackEvent("Capture Order " + order.Source + ": " + order.ID)
+		client.TrackEvent("Team Name " + teamname + " db " + db + " order id: " + order.ID)
 		client.TrackTrace(t.String())
 	}
 
 	// Let's send to RabbitMQ
-	AddOrderToRabbitMQ(order.ID, order.Source)
+	//	AddOrderToRabbitMQ(order.ID, order.Source)
 
 	// Now let's place this on the eventhub
 	/* if eventURL != "" {
