@@ -11,9 +11,7 @@ RUN go get -u -v github.com/streadway/amqp
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:$PATH
 ENV MONGOHOST=
-ENV INSIGHTSKEY=
-ENV SOURCE=
-ENV RABBITMQHOST=
+ENV TEAMNAME=
 
 
 # Copy the application files (needed for production)
