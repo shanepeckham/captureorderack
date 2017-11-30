@@ -159,7 +159,7 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	if insightskey != "" {
 		t := time.Now()
 		client := appinsights.NewTelemetryClient(insightskey)
-		client.TrackEvent("Team Name " + teamname + " db " + db + " order id: " + order.ID)
+		client.TrackEvent("Team Name " + teamname + " db " + db)
 		client.TrackTrace(t.String())
 	}
 
