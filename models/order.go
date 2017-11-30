@@ -66,6 +66,8 @@ func AddOrder(order Order) (orderId string) {
 // AddOrderToMongoDB Add the order to MondoDB
 func AddOrderToMongoDB(order Order) (orderId string) {
 
+	log.Println("Team " + teamname)
+
 	if partitionKey == "" {
 		partitionKey = "0"
 	}
