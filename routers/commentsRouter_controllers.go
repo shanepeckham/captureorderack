@@ -7,7 +7,6 @@ import (
 
 func init() {
 
-
 	beego.GlobalControllerRouter["captureorderfd/controllers:OrderController"] = append(beego.GlobalControllerRouter["captureorderfd/controllers:OrderController"],
 		beego.ControllerComments{
 			Method:           "Post",
@@ -15,6 +14,5 @@ func init() {
 			AllowHTTPMethods: []string{"post"},
 			MethodParams:     param.Make(),
 			Params:           nil})
-
 
 }

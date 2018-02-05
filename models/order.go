@@ -186,7 +186,7 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	//	Let's write only if we have a key
 	if insightskey != "" {
 		client := appinsights.NewTelemetryClient(insightskey)
-		client.TrackEvent("CapureOrder:v4 - Team Name " + teamname + " db " + db)
+		client.TrackEvent("CapureOrder: - Team Name " + teamname + " db " + db)
 	}
 
 	// Now let's place this on the eventhub

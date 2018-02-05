@@ -2,7 +2,10 @@ package controllers
 
 import (
 	"captureorderfd/models"
+<<<<<<< HEAD
 
+=======
+>>>>>>> 25ede2e870565f5f07aa493fe98fe3a9030e1c08
 	"encoding/json"
 
 	"github.com/astaxie/beego"
