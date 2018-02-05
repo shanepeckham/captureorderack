@@ -1,7 +1,8 @@
 package controllers
 
 import (
-	"hackcaptureorder/models"
+	"captureorderfd/models"
+
 	"encoding/json"
 
 	"github.com/astaxie/beego"

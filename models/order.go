@@ -1,11 +1,19 @@
 package models
 
 import (
+	"crypto/hmac"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/base64"
 	"fmt"
+	"html/template"
 	"log"
+	"math/rand"
 	"net"
+	"net/http"
+	"net/url"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -28,16 +36,27 @@ var (
 
 var username string
 var address []string
-var isAzure = true
+var isAzure bool
 var session *mgo.Session
+var asession *mgo.Session
+var collection *mgo.Collection
 var serr error
 
 var hosts string
+var db string
 
-var insightskey = os.Getenv("INSIGHTSKEY")
+var insightskey = "23c6b1ec-ca92-4083-86b6-eba851af9032"
+
 var rabbitMQURL = os.Getenv("RABBITMQHOST")
-var partitionKey = strings.TrimSpace(os.Getenv("PARTITIONKEY"))
+var partitionKey = "0"
 var mongoURL = os.Getenv("MONGOHOST")
+var teamname = os.Getenv("TEAMNAME")
+var eventPolicyName = os.Getenv("EVENTPOLICYNAME")
+var eventPolicyKey = os.Getenv("EVENTPOLICYKEY")
+
+var eventURL = os.Getenv("EVENTURL")
+
+var eventURLWithPartition = os.Getenv("EVENTURL") + "/partitions/"
 
 // Order represents the order json
 type Order struct {
@@ -51,35 +70,10 @@ type Order struct {
 }
 
 func init() {
+
 	OrderList = make(map[string]*Order)
-}
 
-func AddOrder(order Order) (orderId string) {
-
-	return orderId
-}
-
-// AddOrderToMongoDB Add the order to MondoDB
-func AddOrderToMongoDB(order Order) (orderId string) {
-
-	if partitionKey == "" {
-		partitionKey = "0"
-	}
-
-	NewOrderID := bson.NewObjectId()
-
-	order.ID = NewOrderID.Hex()
-
-	order.Status = "Open"
-	if order.Source == "" || order.Source == "string" {
-		order.Source = os.Getenv("SOURCE")
-	}
-
-	database = "k8orders"
-	password = ""   //V2
-	isAzure = false // REMOVE this for V2 tag and for cosmos to work
-
-	/* //Now we check if this mongo or cosmos // V2
+	//Now we check if this mongo or cosmos // V2
 	if strings.Contains(mongoURL, "?ssl=true") {
 		isAzure = true
 
@@ -97,8 +91,9 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 		password = st[co+1:]
 		log.Print("db ", database, " pwd ", password)
 	}
-	// V2s */
+	// V2s
 
+	// DialInfo holds options for establishing a session with a MongoDB cluster.
 	dialInfo := &mgo.DialInfo{
 		Addrs:    []string{fmt.Sprintf("%s.documents.azure.com:10255", database)}, // Get HOST + PORT
 		Timeout:  60 * time.Second,
@@ -109,15 +104,20 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 			return tls.Dial("tcp", addr.String(), &tls.Config{})
 		},
 	}
+
 	//V2
 	// Create a session which maintains a pool of socket connections
 	// to our MongoDB.
-	if isAzure {
-		session, serr = mgo.DialWithInfo(dialInfo)
+	if isAzure == true {
+		asession, serr = mgo.DialWithInfo(dialInfo)
+		session = asession.Copy()
 		log.Println("Writing to CosmosDB")
+		db = "CosmosDB"
 	} else {
-		session, serr = mgo.Dial(mongoURL)
+		asession, serr = mgo.Dial(mongoURL)
+		session = asession.Copy()
 		log.Println("Writing to MongoDB")
+		db = "MongoDB"
 	}
 
 	if serr != nil {
@@ -126,42 +126,78 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 		os.Exit(1)
 	}
 
-	defer session.Close()
-
 	// SetSafe changes the session safety mode.
 	// If the safe parameter is nil, the session is put in unsafe mode, and writes become fire-and-forget,
 	// without error checking. The unsafe mode is faster since operations won't hold on waiting for a confirmation.
 	// http://godoc.org/labix.org/v2/mgo#Session.SetMode.
-	session.SetSafe(&mgo.Safe{})
+	session.SetSafe(nil)
 
 	// get collection
-	collection := session.DB(database).C("orders")
+	collection = session.DB(database).C("orders")
 
+}
+
+func AddOrder(order Order) (orderId string) {
+
+	return orderId
+}
+
+// AddOrderToMongoDB Add the order to MondoDB
+func AddOrderToMongoDB(order Order) (orderId string) {
+
+	session = asession.Copy()
+
+	log.Println("Team " + teamname)
+
+	if partitionKey == "" {
+		partitionKey = "0"
+	}
+
+	/* 	if order.Status == "Kill" {
+		log.Println("Killing")
+	} */
+
+	NewOrderID := bson.NewObjectId()
+
+	order.ID = NewOrderID.Hex()
+
+	order.Status = "Open"
+	if order.Source == "" || order.Source == "string" {
+		order.Source = os.Getenv("SOURCE")
+	}
+
+	database = "k8orders"
+	password = "" //V2
+	//isAzure = false // REMOVE this for V2 tag and for cosmos to work
+
+	log.Print(mongoURL, isAzure, "v3")
+
+	//defer asession.Close()
+	defer session.Close()
 	// insert Document in collection
 	serr = collection.Insert(order)
 	log.Println("_id:", order)
 
 	if serr != nil {
 		log.Fatal("Problem inserting data: ", serr)
-		status = "CProblem inserting data, go error %v\n"
-		return ""
+		log.Println("_id:", order)
 	}
 
 	//	Let's write only if we have a key
 	if insightskey != "" {
-		t := time.Now()
 		client := appinsights.NewTelemetryClient(insightskey)
-		client.TrackEvent("Capture Order " + order.Source + ": " + order.ID)
-		client.TrackTrace(t.String())
+		client.TrackEvent("CapureOrder:v4 - Team Name " + teamname + " db " + db)
 	}
 
-	// Let's send to RabbitMQ
-	AddOrderToRabbitMQ(order.ID, order.Source)
-
 	// Now let's place this on the eventhub
-	/* if eventURL != "" {
-		AddOrderToEventHub(order.ID, order.Source)
-	} */
+	if eventURL != "" {
+		log.Println("Sending to event hub " + eventURLWithPartition)
+		AddOrderToEventHub(order.ID, teamname)
+	} else {
+		// Let's send to RabbitMQ
+		log.Println("Sending to rabbitmq " + rabbitMQURL)
+		AddOrderToRabbitMQ(order.ID, teamname)
+	}
 
 	return order.ID
 }
@@ -170,23 +206,22 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 
 func AddOrderToRabbitMQ(orderId string, orderSource string) {
 
-	log.Println("Rabbit")
-
+	//Instantiate RabbitMq
 	conn, err := amqp.Dial(rabbitMQURL)
 	failOnError(err, "Failed to connect to RabbitMQ")
-	defer conn.Close()
+	//	defer conn.Close()
 
 	ch, err := conn.Channel()
 	failOnError(err, "Failed to open a channel")
-	defer ch.Close()
+	//	defer ch.Close()
 
 	q, err := ch.QueueDeclare(
-		"order"+partitionKey, // name
-		false, // durable
-		false, // delete when unused
-		false, // exclusive
-		false, // no-wait
-		nil,   // arguments
+		"order", // name
+		false,   // durable
+		false,   // delete when unused
+		false,   // exclusive
+		false,   // no-wait
+		nil,     // arguments
 	)
 	failOnError(err, "Failed to declare a queue")
 
@@ -197,10 +232,11 @@ func AddOrderToRabbitMQ(orderId string, orderSource string) {
 		false,  // mandatory
 		false,  // immediate
 		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        []byte(body),
+			DeliveryMode: amqp.Persistent,
+			ContentType:  "application/json",
+			Body:         []byte(body),
 		})
-	log.Printf(" [x] Sent %s", body)
+	log.Printf(" [x] Sent %s", body, " queue:", q.Name)
 	failOnError(err, "Failed to publish a message")
 }
 
@@ -209,4 +245,50 @@ func failOnError(err error, msg string) {
 		log.Fatalf("%s: %s", msg, err)
 		panic(fmt.Sprintf("%s: %s", msg, err))
 	}
+}
+
+// AddOrderToEventHub adds it to an event hub
+func AddOrderToEventHub(orderId string, orderSource string) {
+
+	partitionKey := strconv.Itoa(rand.Intn(3))
+	eventURLWithPartition = os.Getenv("EVENTURL") + "/partitions/" + partitionKey + "/messages"
+
+	log.Println("SaS pre ", eventURLWithPartition, eventPolicyName, eventPolicyKey)
+	SaS := createSharedAccessToken(strings.TrimSpace(eventURLWithPartition), strings.TrimSpace(eventPolicyName), strings.TrimSpace(eventPolicyKey))
+	log.Println("SaS post ", SaS)
+
+	log.Println("evenurlwith partition  ", eventURLWithPartition)
+
+	tr := &http.Transport{DisableKeepAlives: false}
+	//req, _ := http.NewRequest("POST", eventURL, strings.NewReader("{'order':"+"'"+orderId+"', 'source':"+"'"+os.Getenv("SOURCE")+"', 'time':"+"'"+t.String()+"'"+", 'status':"+"'"+"Open"+"'"+", 'hostname':"+"'"+hostname+"'}"))
+	req, _ := http.NewRequest("POST", eventURLWithPartition, strings.NewReader("{'order':"+"'"+orderId+"', 'source':"+"'"+orderSource+"'}"))
+	req.Header.Set("Authorization", SaS)
+	req.Close = false
+
+	res, err := tr.RoundTrip(req)
+	if err != nil {
+		fmt.Println(res, err)
+	}
+
+}
+
+func createSharedAccessToken(uri string, saName string, saKey string) string {
+
+	if len(uri) == 0 || len(saName) == 0 || len(saKey) == 0 {
+		return "Missing required parameter"
+	}
+
+	encoded := template.URLQueryEscaper(uri)
+	now := time.Now().Unix()
+	week := 60 * 60 * 24 * 7
+	ts := now + int64(week)
+	signature := encoded + "\n" + strconv.Itoa(int(ts))
+	key := []byte(saKey)
+	hmac := hmac.New(sha256.New, key)
+	hmac.Write([]byte(signature))
+	hmacString := template.URLQueryEscaper(base64.StdEncoding.EncodeToString(hmac.Sum(nil)))
+
+	result := "SharedAccessSignature sr=" + encoded + "&sig=" +
+		hmacString + "&se=" + strconv.Itoa(int(ts)) + "&skn=" + saName
+	return result
 }
