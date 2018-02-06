@@ -110,20 +110,24 @@ func init() {
 	// to our MongoDB.
 	if isAzure == true {
 		asession, serr = mgo.DialWithInfo(dialInfo)
+		if serr != nil {
+			log.Fatal("Can't connect to CosmosDB, go error", serr)
+			status = "Can't connect to CosmosDB, go error %v\n"
+			os.Exit(1)
+		}
 		session = asession.Copy()
 		log.Println("Writing to CosmosDB")
 		db = "CosmosDB"
 	} else {
 		asession, serr = mgo.Dial(mongoURL)
+		if serr != nil {
+			log.Fatal("Can't connect to mongo, go error", serr)
+			status = "Can't connect to mongo, go error %v\n"
+			os.Exit(1)
+		}
 		session = asession.Copy()
 		log.Println("Writing to MongoDB")
 		db = "MongoDB"
-	}
-
-	if serr != nil {
-		log.Fatal("Can't connect to mongo, go error", serr)
-		status = "Can't connect to mongo, go error %v\n"
-		os.Exit(1)
 	}
 
 	// SetSafe changes the session safety mode.
