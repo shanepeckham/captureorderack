@@ -1,8 +1,9 @@
 package controllers
 
 import (
-	"captureorderfd/models"
 	"encoding/json"
+
+	"github.com/shanepeckham/captureorderack/models"
 
 	"github.com/astaxie/beego"
 )

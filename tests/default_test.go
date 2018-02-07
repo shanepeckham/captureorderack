@@ -3,18 +3,11 @@ package test
 import (
 	"net/http"
 	"net/http/httptest"
-	"testing"
-	"runtime"
 	"path/filepath"
-<<<<<<< HEAD
-<<<<<<< HEAD
-	_ "hackcaptureorder/routers"
-=======
-	_ "captureorderfd/routers"
->>>>>>> 752b08c51637b3fa2b2e71295a8749a3a55addfd
-=======
-	_ "captureorderfd/routers"
->>>>>>> 25ede2e870565f5f07aa493fe98fe3a9030e1c08
+	"runtime"
+	"testing"
+
+	_ "github.com/shanepeckham/captureorderack/routers"
 
 	"github.com/astaxie/beego"
 	. "github.com/smartystreets/goconvey/convey"
@@ -22,7 +15,7 @@ import (
 
 func init() {
 	_, file, _, _ := runtime.Caller(1)
-	apppath, _ := filepath.Abs(filepath.Dir(filepath.Join(file, ".." + string(filepath.Separator))))
+	apppath, _ := filepath.Abs(filepath.Dir(filepath.Join(file, ".."+string(filepath.Separator))))
 	beego.TestBeegoInit(apppath)
 }
 
@@ -35,12 +28,11 @@ func TestGet(t *testing.T) {
 	beego.Trace("testing", "TestGet", "Code[%d]\n%s", w.Code, w.Body.String())
 
 	Convey("Subject: Test Station Endpoint\n", t, func() {
-	        Convey("Status Code Should Be 200", func() {
-	                So(w.Code, ShouldEqual, 200)
-	        })
-	        Convey("The Result Should Not Be Empty", func() {
-	                So(w.Body.Len(), ShouldBeGreaterThan, 0)
-	        })
+		Convey("Status Code Should Be 200", func() {
+			So(w.Code, ShouldEqual, 200)
+		})
+		Convey("The Result Should Not Be Empty", func() {
+			So(w.Body.Len(), ShouldBeGreaterThan, 0)
+		})
 	})
 }
-
