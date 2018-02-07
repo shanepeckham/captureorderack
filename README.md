@@ -20,3 +20,20 @@ ENV EVENTPOLICYNAME="[policy key name]"
 ENV EVENTPOLICYKEY="[policy key]"
 
 ENV PARTITIONKEY=[0,1,2]
+
+## Building
+
+### Requirements
+
+- GoLang
+- [dep](https://github.com/golang/dep)
+
+### Source
+
+Pull source `go get github.com/shanepeckham/captureorderack`
+Edit and run `go build .` to rebuild.
+Options: If updating dependencies use `dep` and `dep ensure` or `dep add` to update `/vendor`
+
+### Docker 
+
+Run `docker build . -t yourtagshere`
