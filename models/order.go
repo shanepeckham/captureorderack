@@ -10,7 +10,6 @@ import (
 
 	"html/template"
 	"log"
-	"math/big"
 	"math/rand"
 	"net"
 	"net/http"
@@ -232,15 +231,8 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	// Now let's place this on the eventhub
 	if eventURL != "" {
 		log.Println("Sending to event hub " + eventURLWithPartition)
-		start := time.Now()
-		r := new(big.Int)
-		fmt.Println(r.Binomial(1000, 10))
-
 		//	AddOrderToEventHub(order.ID, teamname)
 		AddOrderToEventHubAMQP(order.ID, teamname)
-		elapsed := time.Since(start)
-		log.Printf("AMQP took %s", elapsed)
-
 	} else {
 		// Let's send to RabbitMQ
 		log.Println("Sending to rabbitmq " + rabbitMQURL)
