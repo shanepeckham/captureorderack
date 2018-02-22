@@ -1,4 +1,4 @@
-# CaptureOrder  - The Azure Kubernetes Challenge
+# CaptureOrder - golang
 
 A containerised Go swagger API to capture orders, write them to MongoDb.
 
