@@ -8,13 +8,13 @@ namespace OrderCaptureAPI.Services
     using OrderCaptureAPI.Singetons;
     using Microsoft.ApplicationInsights;
     using Amqp;
+    using Amqp.Framing;
 
     public class OrderService
     {
 
         #region Protected variables
         private string _teamName;
-        private string _amqpHost;
         private IMongoCollection<Order> ordersCollection;
         private readonly ILogger _logger;
         private readonly TelemetryClient _telemetryClient;
@@ -23,15 +23,27 @@ namespace OrderCaptureAPI.Services
         #endregion
 
         #region Constructor
-        public OrderService(ILogger<Controllers.OrderController> logger, TelemetryClient telemetryClient)
+        public OrderService(ILoggerFactory loggerFactory, TelemetryClient telemetryClient)
         {
             // Initialize the class logger and telemetry client
-            _logger = logger;
+            _logger = loggerFactory.CreateLogger("OrderService");
             _telemetryClient = telemetryClient;
 
             // Initialize the class using environment variables
             _teamName = System.Environment.GetEnvironmentVariable("TEAMNAME");
-            _amqpHost = System.Environment.GetEnvironmentVariable("RABBITMQHOST");
+
+            // Initialize MongoDB
+            // Figure out if this is running on CosmosDB
+            var mongoHost = MongoClientSingleton.Instance.Settings.Server.ToString();
+            _isCosmosDb = mongoHost.Contains("documents.azure.com");
+            _logger.LogInformation($"Cosmos DB: {_isCosmosDb}");
+            _logger.LogInformation($"MongoHost: {mongoHost}");
+
+            // Initialize AMQP
+            var amqpHost = AMQPClientSingleton.AMQPHost;        
+            _isEventHub = mongoHost.Contains("servicebus.windows.net");
+            _logger.LogInformation($"Event Hub: {_isEventHub}");
+            _logger.LogInformation($"AMQP Host: {AMQPClientSingleton.AMQPHost}");
         }
         #endregion
 
@@ -40,9 +52,6 @@ namespace OrderCaptureAPI.Services
         {
             try
             {
-                // Figure out if this is running on CosmosDB
-                _isCosmosDb = MongoClientSingleton.Instance.Settings.Server.ToString().Contains("documents.azure.com");
-
                 // Get the MongoDB collection
                 ordersCollection = MongoClientSingleton.Instance.GetDatabase("k8orders").GetCollection<Order>("orders");
                 order.Status = "Open";
@@ -56,9 +65,9 @@ namespace OrderCaptureAPI.Services
                 var db = _isCosmosDb ? "CosmosDB" : "MongoDB";
                 await Task.Run(() =>
                 {
-                    _telemetryClient.TrackEvent("CapureOrder: - Team Name " + _teamName + " db " + db);
+                    _telemetryClient.TrackEvent($"CapureOrder: - Team Name {_teamName} -  db {db}");
                 });
-                _logger.LogTrace($"Added order to {db}");
+                _logger.LogTrace($"CapureOrder {order.Id}: - Team Name {_teamName} -  db {db}");
 
                 return order.Id;
             }
@@ -73,29 +82,15 @@ namespace OrderCaptureAPI.Services
         {
             try
             {
-                 // Figure out if this is running on EventHub
-                _isEventHub = _amqpHost.Contains("servicebus.windows.net");
-
-                // If running on Azure, get a random partition from 0 to 2 and append to address
-                if(_isEventHub) {
-                    var rnd = new Random(DateTime.Now.Millisecond);
-                    int partition = rnd.Next(0, 2);
-                    _amqpHost += _amqpHost + "/Partitions/" + partition.ToString();
-                }
-
-                var amqpConnection = await Connection.Factory.CreateAsync(new Address(_amqpHost));
-                var amqpSession = new Session(amqpConnection);
+                // Send to AMQP
                 var amqpMessage = new Message($"{{'order': '{order.Id}', 'source': '{_teamName}'}}");
-                var amqpSender = new SenderLink(amqpSession, "sender-link", "q1");
-
-                // Send to AMQP (fire and forget)
-                amqpSender.Send(amqpMessage, null, null);
+                await AMQPClientSingleton.Instance.SendAsync(amqpMessage);
                 _logger.LogTrace("Sent message to AMQP");
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex.InnerException, ex.InnerException.Message, order);
-                throw new Exception(ex.InnerException.Message, ex.InnerException);
+                _logger.LogCritical(ex, ex.Message, order);
+                throw new Exception(ex.Message, ex);
             }
         }
         #endregion

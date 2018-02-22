@@ -28,22 +28,26 @@ namespace OrderCaptureAPI
         public void ConfigureServices(IServiceCollection services)
         {
             var insightsKey = System.Environment.GetEnvironmentVariable("APPINSIGHTS_KEY");
-            if(string.IsNullOrEmpty(insightsKey)) {
+            if (string.IsNullOrEmpty(insightsKey))
+            {
                 // Use the OpenHack Application Insights
                 services.AddApplicationInsightsTelemetry("23c6b1ec-ca92-4083-86b6-eba851af9032");
             }
-            else {
+            else
+            {
                 // Use your own Application Insights
                 // Warning: We will not be able to track you or give points!
                 services.AddApplicationInsightsTelemetry(insightsKey);
             }
-            
-           services.AddMvcCore().AddVersionedApiExplorer( o =>
+
+            services.AddLogging();  
+
+            services.AddMvcCore().AddVersionedApiExplorer(o =>
                 {
                     o.GroupNameFormat = "'v'VVV";
                     o.SubstituteApiVersionInUrl = true;
                 }
-            );
+             );
             services.AddMvc();
             services.AddApiVersioning(o => o.ReportApiVersions = true);
             services.AddSwaggerGen(
@@ -52,7 +56,7 @@ namespace OrderCaptureAPI
                     var provider = services.BuildServiceProvider()
                                         .GetRequiredService<IApiVersionDescriptionProvider>();
 
-                    foreach ( var description in provider.ApiVersionDescriptions )
+                    foreach (var description in provider.ApiVersionDescriptions)
                     {
                         options.SwaggerDoc(
                             description.GroupName,
@@ -60,12 +64,12 @@ namespace OrderCaptureAPI
                             {
                                 Title = $"Order Capture API {description.ApiVersion}",
                                 Version = description.ApiVersion.ToString()
-                            } );
+                            });
                     }
 
                     // add a custom operation filter which sets default values
                     options.OperationFilter<SwaggerDefaultValues>();
-                } );
+                });
         }
 
         // This method gets called by the runtime. Use this method to configure the HTTP request pipeline.
@@ -80,21 +84,21 @@ namespace OrderCaptureAPI
                 app.UseDeveloperExceptionPage();
             }
 
-            loggerFactory.AddConsole( Configuration.GetSection( "Logging" ) );
-            loggerFactory.AddDebug();
+            //loggerFactory.AddConsole();
+            //loggerFactory.AddDebug();
 
             app.UseMvc();
             app.UseSwagger();
             app.UseSwaggerUI(
                 options =>
                 {
-                    foreach ( var description in provider.ApiVersionDescriptions )
+                    foreach (var description in provider.ApiVersionDescriptions)
                     {
                         options.SwaggerEndpoint(
                             $"/swagger/{description.GroupName}/swagger.json",
-                            description.GroupName.ToUpperInvariant() );
+                            description.GroupName.ToUpperInvariant());
                     }
-                } );
+                });
         }
     }
 }

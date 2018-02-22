@@ -19,20 +19,22 @@ namespace OrderCaptureAPI.Controllers
         private readonly TelemetryClient _telemetryClient;
         private OrderService _orderService;
 
-        public OrderController(ILogger<OrderController> logger, TelemetryClient telemetryClient)
+        public OrderController(ILoggerFactory loggerFactory, TelemetryClient telemetryClient)
         {
             // Set the dependency injected parameters          
-            _logger = logger; 
+            _logger = loggerFactory.CreateLogger("OrderController"); 
             _telemetryClient = telemetryClient;
 
             // Initialize the Order Service
-            _orderService = new OrderService(logger,telemetryClient);
+            _orderService = new OrderService(loggerFactory,telemetryClient);
         }
 
         // POST /order
         [HttpPost]
         public async Task<JsonResult> Post(Order order)
         {
+             _logger.LogInformation("OrderController POST");
+            
             try
             {
                 // Add the order to MongoDB

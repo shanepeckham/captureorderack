@@ -15,9 +15,10 @@ ENV MONGOHOST="mongodb://[mongoinstance].[namespace]"
 
 ### For RabbitMQ
 ```
-ENV RABBITMQHOST=amqp://[url]:5672
+ENV AMQPHOST=amqp://[url]:5672
 ENV PARTITIONKEY=[0,1,2]
 ```
 ### For Event Hubs
 ```
-ENV RABBITMQHOST="amqps://[policy name]:[policy key]@[youreventhub].servicebus.windows.net/[eventhubname]"
+ENV AMQPHOST="amqps://[policy name]:[policy key]@[youreventhub].servicebus.windows.net/[eventhubname]"
+ENV EVENTHUBNAME="[eventhubname]"
