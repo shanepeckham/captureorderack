@@ -67,7 +67,7 @@ namespace OrderCaptureAPI.Services
                 }
 
                 var rnd = new Random(DateTime.Now.Millisecond);
-                int partition = rnd.Next(3);
+                int partition = rnd.Next(11);
                 order.Product = $"product-{partition}";
 
                 await ordersCollection.InsertOneAsync(order);

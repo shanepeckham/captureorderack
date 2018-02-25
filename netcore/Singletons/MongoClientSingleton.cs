@@ -34,11 +34,13 @@ namespace OrderCaptureAPI.Singetons
             var db = MongoClientSingleton.Instance.GetDatabase("k8orders");
 
             // Create a sharded collection
-            var shardedCollectionCommand = new JsonCommand<BsonDocument>(@"{ shardCollection: ""k8orders.orders"", key: { product: ""hashed"" } }");
-            db.RunCommand(shardedCollectionCommand);
-            
-            // If the collection is not sharded, ensure it is sharded properly with the "product" key
-            
+            try {
+                var shardedCollectionCommand = new JsonCommand<BsonDocument>(@"{ shardCollection: ""k8orders.orders"", key: { product: ""hashed"" } }");
+                db.RunCommand(shardedCollectionCommand);
+            }
+            catch(MongoCommandException) {
+                // The collection is most likely already sharded. I couldn't find a more elegant way to check this.
+            }
         }
 
         public static MongoClient Instance
