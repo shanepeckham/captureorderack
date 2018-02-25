@@ -9,6 +9,7 @@ namespace OrderCaptureAPI.Services
     using Microsoft.ApplicationInsights;
     using Amqp;
     using Amqp.Framing;
+    using MongoDB.Bson;
 
     public class OrderService
     {
@@ -40,8 +41,8 @@ namespace OrderCaptureAPI.Services
             _logger.LogInformation($"MongoHost: {mongoHost}");
 
             // Initialize AMQP
-            var amqpHost = AMQPClientSingleton.AMQPHost;        
-            _isEventHub = mongoHost.Contains("servicebus.windows.net");
+            var amqpHost = AMQPClientSingleton.AMQPHost;
+            _isEventHub = amqpHost.Contains("servicebus.windows.net");
             _logger.LogInformation($"Event Hub: {_isEventHub}");
             _logger.LogInformation($"AMQP Host: {AMQPClientSingleton.AMQPHost}");
         }
@@ -50,6 +51,10 @@ namespace OrderCaptureAPI.Services
         #region Methods
         public async Task<string> AddOrderToMongoDB(Order order)
         {
+
+            var startTime = DateTime.UtcNow;
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var success = false;
             try
             {
                 // Get the MongoDB collection
@@ -61,36 +66,55 @@ namespace OrderCaptureAPI.Services
                     order.Source = System.Environment.GetEnvironmentVariable("SOURCE");
                 }
 
+                var rnd = new Random(DateTime.Now.Millisecond);
+                int partition = rnd.Next(3);
+                order.Product = $"product-{partition}";
+
                 await ordersCollection.InsertOneAsync(order);
+
                 var db = _isCosmosDb ? "CosmosDB" : "MongoDB";
                 await Task.Run(() =>
                 {
                     _telemetryClient.TrackEvent($"CapureOrder: - Team Name {_teamName} -  db {db}");
                 });
                 _logger.LogTrace($"CapureOrder {order.Id}: - Team Name {_teamName} -  db {db}");
-
+                success = true;
                 return order.Id;
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex.InnerException, ex.InnerException.Message, order);
-                throw new Exception(ex.InnerException.Message, ex.InnerException);
+                _logger.LogCritical(ex, ex.Message, order);
+                _telemetryClient.TrackException(ex);
+                throw;
+            }
+            finally
+            {
+                _telemetryClient.TrackDependency($"MongoDB-CosmosDB-{_isCosmosDb}", "Send", startTime, timer.Elapsed, success);
             }
         }
 
         public async Task AddOrderToAMQP(Order order)
         {
+            var startTime = DateTime.UtcNow;
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var success = false;
             try
             {
                 // Send to AMQP
                 var amqpMessage = new Message($"{{'order': '{order.Id}', 'source': '{_teamName}'}}");
                 await AMQPClientSingleton.Instance.SendAsync(amqpMessage);
                 _logger.LogTrace("Sent message to AMQP");
+                success = true;
             }
             catch (Exception ex)
             {
                 _logger.LogCritical(ex, ex.Message, order);
-                throw new Exception(ex.Message, ex);
+                _telemetryClient.TrackException(ex);
+                throw;
+            }
+            finally
+            {
+                _telemetryClient.TrackDependency($"AMQP-EventHub-{_isEventHub}", "Send", startTime, timer.Elapsed, success);
             }
         }
         #endregion

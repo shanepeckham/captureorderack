@@ -1,7 +1,8 @@
 using System;
 using System.Security.Authentication;
+using MongoDB.Bson;
 using MongoDB.Driver;
-
+using OrderCaptureAPI.Models;
 
 namespace OrderCaptureAPI.Singetons
 {
@@ -28,6 +29,16 @@ namespace OrderCaptureAPI.Singetons
 
             // Initialize the MongoClient singleton
             _mongoClientInstance =  new MongoClient(mongoURL);
+
+            // Create the database 
+            var db = MongoClientSingleton.Instance.GetDatabase("k8orders");
+
+            // Create a sharded collection
+            var shardedCollectionCommand = new JsonCommand<BsonDocument>(@"{ shardCollection: ""k8orders.orders"", key: { product: ""hashed"" } }");
+            db.RunCommand(shardedCollectionCommand);
+            
+            // If the collection is not sharded, ensure it is sharded properly with the "product" key
+            
         }
 
         public static MongoClient Instance

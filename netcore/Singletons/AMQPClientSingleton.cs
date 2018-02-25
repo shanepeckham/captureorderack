@@ -42,7 +42,7 @@ namespace OrderCaptureAPI.Singetons
             if (isEventHub)
             {
                 var rnd = new Random(DateTime.Now.Millisecond);
-                int partition = rnd.Next(0, 0);
+                int partition = rnd.Next(3);
                 _amqpHost += _amqpHost + "/Partitions/" + partition.ToString();
             }
 
