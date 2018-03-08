@@ -1,2 +1,2 @@
-docker build -t shanepeckham/captureorderack:amqp . 
-docker push shanepeckham/captureorderack:amqp
+docker build -t shanepeckham/captureorderack:v6 . 
+docker push shanepeckham/captureorderack:v6

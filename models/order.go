@@ -148,30 +148,32 @@ func init() {
 	collection = session.DB(database).C("orders")
 
 	// Now let's parse the eventhub
-	url, err := url.Parse(eventURL)
-	if err != nil {
-		log.Fatal("Problem parsing url: ", err)
-	}
-	// Get the namespace
-	ht := fmt.Sprintf("%s", url.Host)
-	ho := strings.Index(ht, ".")
-	ehNamespace = ht[:ho]
+	if eventURL != "" {
+		url, err := url.Parse(eventURL)
+		if err != nil {
+			log.Fatal("Problem parsing url: ", err)
+		}
+		// Get the namespace
+		ht := fmt.Sprintf("%s", url.Host)
+		ho := strings.Index(ht, ".")
+		ehNamespace = ht[:ho]
 
-	// Get the eventhub
-	et := fmt.Sprintf("%s", url.Path)
-	ehName = et[1:]
-	log.Print("namespace:", ehNamespace, "eventhubname:", ehName)
+		// Get the eventhub
+		et := fmt.Sprintf("%s", url.Path)
+		ehName = et[1:]
+		log.Print("namespace:", ehNamespace, "eventhubname:", ehName)
 
-	ehSender, serr = eventhub.NewSender(eventhub.SenderOpts{
-		EventHubNamespace:   ehNamespace,
-		EventHubName:        ehName,
-		SasPolicyName:       eventPolicyName,
-		SasPolicyKey:        eventPolicyKey,
-		TokenExpiryInterval: 20 * time.Second,
-		Debug:               false,
-	})
-	if serr != nil {
-		panic(serr)
+		ehSender, serr = eventhub.NewSender(eventhub.SenderOpts{
+			EventHubNamespace:   ehNamespace,
+			EventHubName:        ehName,
+			SasPolicyName:       eventPolicyName,
+			SasPolicyKey:        eventPolicyKey,
+			TokenExpiryInterval: 20 * time.Second,
+			Debug:               false,
+		})
+		if serr != nil {
+			panic(serr)
+		}
 	}
 	//	defer ehSender.Close()
 
@@ -206,7 +208,7 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 		order.Source = os.Getenv("SOURCE")
 	}
 
-	database = "k8orders"
+	database = "k8orders2"
 	password = "" //V2
 
 	log.Print(mongoURL, isAzure, "AMQP")
@@ -214,6 +216,7 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	//defer asession.Close()
 	defer session.Close()
 	// insert Document in collection
+
 	serr = collection.Insert(order)
 	log.Println("_id:", order)
 
