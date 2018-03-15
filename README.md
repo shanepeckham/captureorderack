@@ -26,5 +26,5 @@ ENV EVENTPOLICYNAME="[policy key name]"
 
 ENV EVENTPOLICYKEY="[policy key]"
 
-ENV PARTITIONKEY=[0,1,2]
+
 ```
