@@ -81,6 +81,49 @@ type Order struct {
 
 func init() {
 
+	// Let's validate and spool the ENV VARS
+	if len(os.Getenv("RABBITMQHOST")) == 0 {
+		log.Print("The environment variable RABBITMQHOST has not been set")
+	} else {
+		log.Print("The environment variable RABBITMQHOST is " + os.Getenv("RABBITMQHOST"))
+	}
+
+	if len(os.Getenv("PARTITIONKEY")) == 0 {
+		log.Print("The environment variable PARTITIONKEY has not been set")
+	} else {
+		log.Print("The environment variable PARTITIONKEY is " + os.Getenv("PARTITIONKEY"))
+	}
+
+	if len(os.Getenv("MONGOHOST")) == 0 {
+		log.Print("The environment variable MONGOHOST has not been set")
+	} else {
+		log.Print("The environment variable MONGOHOST is " + os.Getenv("MONGOHOST"))
+	}
+
+	if len(os.Getenv("TEAMNAME")) == 0 {
+		log.Print("The environment variable TEAMNAME has not been set")
+	} else {
+		log.Print("The environment variable TEAMNAME is " + os.Getenv("TEAMNAME"))
+	}
+
+	if len(os.Getenv("EVENTPOLICYNAME")) == 0 {
+		log.Print("The environment variable EVENTPOLICYNAME has not been set")
+	} else {
+		log.Print("The environment variable EVENTPOLICYNAME is " + os.Getenv("EVENTPOLICYNAME"))
+	}
+
+	if len(os.Getenv("EVENTPOLICYKEY")) == 0 {
+		log.Print("The environment variable EVENTPOLICYKEY has not been set")
+	} else {
+		log.Print("The environment variable EVENTPOLICYKEY is " + os.Getenv("EVENTPOLICYKEY"))
+	}
+
+	if len(os.Getenv("EVENTURL")) == 0 {
+		log.Print("The environment variable EVENTURL has not been set")
+	} else {
+		log.Print("The environment variable EVENTURL is " + os.Getenv("EVENTURL"))
+	}
+
 	OrderList = make(map[string]*Order)
 
 	//Now we check if this mongo or cosmos
