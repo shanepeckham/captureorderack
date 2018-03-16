@@ -1,12 +1,12 @@
 package models
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"crypto/tls"
 	"encoding/base64"
 	"fmt"
-	"hackcaptureorder/eventhub"
 
 	"html/template"
 	"log"
@@ -23,6 +23,7 @@ import (
 	"github.com/streadway/amqp"
 	"gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
+	a "pack.ag/amqp"
 )
 
 // The order map
@@ -35,6 +36,11 @@ var (
 	password string
 	status   string
 )
+
+var amqpclient *a.Client
+var aerr error
+var amqpsession *a.Session
+var amqpsender *a.Sender
 
 var username string
 var address []string
@@ -55,13 +61,8 @@ var mongoURL = os.Getenv("MONGOHOST")
 var teamname = os.Getenv("TEAMNAME")
 var eventPolicyName = os.Getenv("EVENTPOLICYNAME")
 var eventPolicyKey = os.Getenv("EVENTPOLICYKEY")
-
 var eventURL = os.Getenv("EVENTURL")
-
 var eventURLWithPartition = os.Getenv("EVENTURL") + "/partitions/"
-
-// AMQP
-var ehSender eventhub.Sender
 
 var (
 	ehNamespace = os.Getenv("EH_TEST_NAMESPACE")
@@ -206,19 +207,31 @@ func init() {
 		ehName = et[1:]
 		log.Print("namespace:", ehNamespace, "eventhubname:", ehName)
 
-		ehSender, serr = eventhub.NewSender(eventhub.SenderOpts{
-			EventHubNamespace:   ehNamespace,
-			EventHubName:        ehName,
-			SasPolicyName:       eventPolicyName,
-			SasPolicyKey:        eventPolicyKey,
-			TokenExpiryInterval: 20 * time.Second,
-			Debug:               false,
-		})
-		if serr != nil {
-			panic(serr)
+		// Native AMQP Library
+		// Create client
+		amqpclient, aerr = a.Dial("amqps://"+ehNamespace+".servicebus.windows.net",
+			a.ConnSASLPlain(eventPolicyName, eventPolicyKey),
+		)
+		if aerr != nil {
+			log.Fatal("Dialing AMQP server:", err)
 		}
+		//	defer amqpclient.Close()
+
+		// Open a session
+		amqpsession, err = amqpclient.NewSession()
+		if err != nil {
+			log.Fatal("Creating AMQP session:", err)
+		}
+
+		// Create a sender
+		amqpsender, err = amqpsession.NewSender(
+			a.LinkTargetAddress("/" + ehName),
+		)
+		if err != nil {
+			log.Fatal("Creating sender link:", err)
+		}
+
 	}
-	//	defer ehSender.Close()
 
 }
 
@@ -278,7 +291,13 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 	if eventURL != "" {
 		log.Println("Sending to event hub " + eventURLWithPartition)
 		//	AddOrderToEventHub(order.ID, teamname)
-		AddOrderToEventHubAMQP(order.ID, teamname)
+
+		//	AddOrderToEventHubAMQP(order.ID, teamname)
+
+		start := time.Now()
+		AddOrderToEventHubAMQPNative(order.ID, teamname)
+		elapsed := time.Since(start)
+		log.Printf("AddOrderToEventHubAMQPNative took %s", elapsed)
 	} else {
 		// Let's send to RabbitMQ
 		log.Println("Sending to rabbitmq " + rabbitMQURL)
@@ -383,26 +402,25 @@ func random(min int, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-// AddOrderToEventHubAMQP adds it to an event hub
-func AddOrderToEventHubAMQP(orderId string, orderSource string) {
+// AddOrderToEventHubAMQPNative adds it to an event hub
+func AddOrderToEventHubAMQPNative(orderId string, orderSource string) {
 
-	/*
-		go func(s eventhub.Sender) {
-			log.Println("Setting up the error channel...\n")
-			for err := range s.ErrorChan() {
-				if err != nil {
-					log.Println("Just received an error: '%v'\n", err)
-					panic(err)
-				}
-			}
-		}(ehSender)
-	*/
-	log.Println("Now sending the order!\n")
+	ctx := context.Background()
 
-	// Send Async
-	// ------------------------------------
-	uniqueID := ehSender.SendAsync("{'order':" + "'" + orderId + "', 'source':" + "'" + orderSource + "'}")
-	idstring := strconv.FormatInt(int64(uniqueID), 10)
-	log.Println("The order sent", idstring)
+	body := "{'order':" + "'" + orderId + "', 'source':" + "'" + orderSource + "'}"
+	// Send a message
+	{
 
+		ctx, cancel := context.WithTimeout(ctx, 1*time.Second)
+
+		// Send message
+		err := amqpsender.Send(ctx, a.NewMessage([]byte(body)))
+		if err != nil {
+			log.Fatal("Sending message:", err)
+		}
+
+		cancel()
+		//	amqpsender.Close()
+	}
+	log.Println("Now sending the order to AMQP\n")
 }
