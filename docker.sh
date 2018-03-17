@@ -1,2 +1,2 @@
-docker build -t shanepeckham/captureorderack:v7 . 
-docker push shanepeckham/captureorderack:v7
+docker build -t shanepeckham/captureorderack:v8 . 
+docker push shanepeckham/captureorderack:v8

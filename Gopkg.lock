@@ -47,7 +47,12 @@
 [[projects]]
   branch = "master"
   name = "github.com/shanepeckham/captureorderack"
-  packages = ["."]
+  packages = [
+    ".",
+    "controllers",
+    "models",
+    "routers"
+  ]
   revision = "4b2a351d4a3fbe1e9417650020359c3c1f9e96fc"
 
 [[projects]]
@@ -77,19 +82,9 @@
   revision = "a0dd226acfbfe50b70ce3380963ed2018ddc68ad"
   version = "v0.4.0"
 
-[[projects]]
-  branch = "go1"
-  name = "qpid.apache.org"
-  packages = [
-    "amqp",
-    "electron",
-    "proton"
-  ]
-  revision = "b25d21e6779a011e972a5f00e433e2034b793da1"
-
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "37dbb1ec774a03e557484b59c371bf4226fe309d219eeffe7f18ad5ed056a328"
+  inputs-digest = "3b8a63a2e7d77942d11b97101a94f9cfb4b21cde38606bc4738bb67f5e692a62"
   solver-name = "gps-cdcl"
   solver-version = 1

@@ -7,7 +7,7 @@ import (
 
 func init() {
 
-	beego.GlobalControllerRouter["captureorderfd/controllers:OrderController"] = append(beego.GlobalControllerRouter["captureorderfd/controllers:OrderController"],
+	beego.GlobalControllerRouter["github.com/shanepeckham/captureorderack/controllers:OrderController"] = append(beego.GlobalControllerRouter["github.com/shanepeckham/captureorderack/controllers:OrderController"],
 		beego.ControllerComments{
 			Method:           "Post",
 			Router:           `/`,

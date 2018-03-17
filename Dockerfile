@@ -1,18 +1,23 @@
 FROM golang:latest
-
-# Install beego and the bee dev tool
-RUN go get -u -v github.com/astaxie/beego
-RUN go get -u -v github.com/beego/bee
-RUN go get -d github.com/Microsoft/ApplicationInsights-Go/appinsights
-RUN go get -u -v gopkg.in/mgo.v2
-RUN go get -u -v github.com/Azure/go-autorest/autorest/utils
-RUN go get -u -v github.com/streadway/amqp
-RUN go get -u -v pack.ag/amqp
-
-RUN apt-get update 
-
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:$PATH
+# Set the working directory to the app directory
+WORKDIR /go/src/github.com/shanepeckham/captureorderack/
+
+# Download dep binary to bin folder in $GOPATH
+RUN mkdir -p /usr/local/bin \
+    && curl -fsSL -o /usr/local/bin/dep https://github.com/golang/dep/releases/download/v0.4.1/dep-linux-amd64 \
+    && chmod +x /usr/local/bin/dep
+
+
+# Add source code. Ignoring local /vendor file (via .dockerignore) to ensure dep
+# correctly restores /vendor file
+COPY . .
+# Restore dependancies with dep 
+RUN dep ensure -v
+# Build binary
+RUN go build .
+
 # EH
 ENV EVENTURL=
 ENV EVENTPOLICYNAME=
@@ -24,19 +29,4 @@ ENV MONGOHOST=
 # RabbitMQ
 ENV RABBITMQHOST=
 
-# Copy the application files (needed for production)
-ADD . /go/src/captureorderfd
-
-# Set the working directory to the app directory
-WORKDIR /go/src/captureorderfd
-
-# Expose the application on port 8080
-EXPOSE 8080
-
-# Set the entry point of the container to the bee command that runs the
-# application and watches for changes
-
-CMD ["bee", "run"]
-
-
-
+CMD ["./captureorderack"]
