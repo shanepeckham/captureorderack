@@ -11,13 +11,13 @@ RUN apk --no-cache add ca-certificates
 
 # Add non root user
 RUN addgroup -S app && adduser -S -g app app
-RUN mkdir -p /go/src/hackcaptureorder
-RUN chown app /go/src/hackcaptureorder
+RUN mkdir -p /go/src/github.com/shanepeckham/captureorderack/
+RUN chown app /go/src/github.com/shanepeckham/captureorderack/
 
-WORKDIR /go/src/hackcaptureorder
+WORKDIR /go/src/github.com/shanepeckham/captureorderack/
 
 # Copy the application files (needed for production)
-ADD . /go/src/hackcaptureorder
+ADD . /go/src/hackcaptureorder/hackcaptureorder
 
 USER app
 
@@ -38,4 +38,4 @@ EXPOSE 8080
 # Set the entry point of the container to the bee command that runs the
 # application and watches for changes
 
-CMD ["bee", "run"]
+CMD ["./captureorderack"]
