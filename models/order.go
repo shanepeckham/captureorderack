@@ -1,18 +1,13 @@
 package models
 
 import (
-	"crypto/hmac"
-	"crypto/sha256"
 	"crypto/tls"
-	"encoding/base64"
+	"net"
+	"context"
 	"fmt"
-	"hackcaptureorder/eventhub"
 
-	"html/template"
 	"log"
 	"math/rand"
-	"net"
-	"net/http"
 	"net/url"
 	"os"
 	"strconv"
@@ -20,52 +15,10 @@ import (
 	"time"
 
 	"github.com/Microsoft/ApplicationInsights-Go/appinsights"
-	"github.com/streadway/amqp"
-	"gopkg.in/mgo.v2"
+    "gopkg.in/mgo.v2"
 	"gopkg.in/mgo.v2/bson"
-)
-
-// The order map
-var (
-	OrderList map[string]*Order
-)
-
-var (
-	database string
-	password string
-	status   string
-)
-
-var username string
-var address []string
-var isAzure bool
-var session *mgo.Session
-var asession *mgo.Session
-var collection *mgo.Collection
-var serr error
-
-var hosts string
-var db string
-
-var insightskey = "23c6b1ec-ca92-4083-86b6-eba851af9032"
-
-var rabbitMQURL = os.Getenv("RABBITMQHOST")
-var partitionKey = "0"
-var mongoURL = os.Getenv("MONGOHOST")
-var teamname = os.Getenv("TEAMNAME")
-var eventPolicyName = os.Getenv("EVENTPOLICYNAME")
-var eventPolicyKey = os.Getenv("EVENTPOLICYKEY")
-
-var eventURL = os.Getenv("EVENTURL")
-
-var eventURLWithPartition = os.Getenv("EVENTURL") + "/partitions/"
-
-// AMQP
-var ehSender eventhub.Sender
-
-var (
-	ehNamespace = os.Getenv("EH_TEST_NAMESPACE")
-	ehName      = os.Getenv("EH_TEST_NAME")
+	amqp10 "pack.ag/amqp"
+	amqp091 "github.com/streadway/amqp"
 )
 
 // Order represents the order json
@@ -79,126 +32,60 @@ type Order struct {
 	Status            string  `required:"true" description:"Order Status"`
 }
 
-func init() {
+// Environment variables
+var customInsightsKey = os.Getenv("APPINSIGHTS_KEY")
+var challengeInsightsKey = os.Getenv("CHALLENGEAPPINSIGHTS_KEY")
+var mongoURL = os.Getenv("MONGOURL")
+var amqpURL = os.Getenv("AMQPURL")
+var teamName = os.Getenv("TEAMNAME")
 
-	OrderList = make(map[string]*Order)
+// MongoDB variables
+var mongoDBSessionCopy *mgo.Session
+var mongoDBSession *mgo.Session
+var mongoDBCollection *mgo.Collection
+var mongoDBSessionError error
 
-	//Now we check if this mongo or cosmos
-	if strings.Contains(mongoURL, "?ssl=true") {
-		isAzure = true
+// MongoDB database and collection names
+var mongoDatabaseName = "k8orders"
+var mongoCollectionName = "orders"
+var mongoCollectionShardKey = "product"
 
-		url, err := url.Parse(mongoURL)
-		if err != nil {
-			log.Fatal("Problem parsing url: ", err)
-		}
+// AMQP 0.9.1 variables
+var amqp091Client amqp091.Connection
+var amqp091Channel amqp091.Channel
+var amqp091Queue amqp091.Queue
 
-		log.Print("user ", url.User)
-		// DialInfo holds options for establishing a session with a MongoDB cluster.
-		st := fmt.Sprintf("%s", url.User)
-		co := strings.Index(st, ":")
+// AMQP 1.0 variables
+var amqp10Client amqp10.Client
+var amqp10Session *amqp10.Session
+var eventHubName string
 
-		database = st[:co]
-		password = st[co+1:]
-		log.Print("db ", database, " pwd ", password)
-	}
+// Application Insights telemetry clients
+var challengeTelemetryClient appinsights.TelemetryClient
+var customTelemetryClient appinsights.TelemetryClient
 
-	// DialInfo holds options for establishing a session with a MongoDB cluster.
-	dialInfo := &mgo.DialInfo{
-		Addrs:    []string{fmt.Sprintf("%s.documents.azure.com:10255", database)}, // Get HOST + PORT
-		Timeout:  60 * time.Second,
-		Database: database, // It can be anything
-		Username: database, // Username
-		Password: password, // PASSWORD
-		DialServer: func(addr *mgo.ServerAddr) (net.Conn, error) {
-			return tls.Dial("tcp", addr.String(), &tls.Config{})
-		},
-	}
+// For tracking and code branching purposes
+var isCosmosDb = strings.Contains(mongoURL, "documents.azure.com")
+var isEventHub = strings.Contains(amqpURL, "servicebus.windows.net")
+var db string // CosmosDB or MongoDB?
+var queueType string // EventHub or RabbitMQ
 
-	// Create a session which maintains a pool of socket connections
-	// to our MongoDB.
-	if isAzure == true {
-		asession, serr = mgo.DialWithInfo(dialInfo)
-		if serr != nil {
-			log.Fatal("Can't connect to CosmosDB, go error", serr)
-			status = "Can't connect to CosmosDB, go error %v\n"
-			os.Exit(1)
-		}
-		session = asession.Copy()
-		log.Println("Writing to CosmosDB")
-		db = "CosmosDB"
-	} else {
-		asession, serr = mgo.Dial(mongoURL)
-		if serr != nil {
-			log.Fatal("Can't connect to mongo, go error", serr)
-			status = "Can't connect to mongo, go error %v\n"
-			os.Exit(1)
-		}
-		session = asession.Copy()
-		log.Println("Writing to MongoDB")
-		db = "MongoDB"
-	}
+// AddOrderToMongoDB Adds the order to MongoDB/CosmosDB
+func AddOrderToMongoDB(order Order) Order {
+	success := false
+	startTime := time.Now()
 
-	// SetSafe changes the session safety mode.
-	// If the safe parameter is nil, the session is put in unsafe mode, and writes become fire-and-forget,
-	// without error checking. The unsafe mode is faster since operations won't hold on waiting for a confirmation.
-	// http://godoc.org/labix.org/v2/mgo#Session.SetMode.
-	session.SetSafe(nil)
+	// Use the existing mongoDBSessionCopy
+	mongoDBSessionCopy = mongoDBSession.Copy()
 
-	// get collection
-	collection = session.DB(database).C("orders")
+	log.Println("Team " + teamName)
 
-	// Now let's parse the eventhub
-	url, err := url.Parse(eventURL)
-	if err != nil {
-		log.Fatal("Problem parsing url: ", err)
-	}
-	// Get the namespace
-	ht := fmt.Sprintf("%s", url.Host)
-	ho := strings.Index(ht, ".")
-	ehNamespace = ht[:ho]
-
-	// Get the eventhub
-	et := fmt.Sprintf("%s", url.Path)
-	ehName = et[1:]
-	log.Print("namespace:", ehNamespace, "eventhubname:", ehName)
-
-	ehSender, serr = eventhub.NewSender(eventhub.SenderOpts{
-		EventHubNamespace:   ehNamespace,
-		EventHubName:        ehName,
-		SasPolicyName:       eventPolicyName,
-		SasPolicyKey:        eventPolicyKey,
-		TokenExpiryInterval: 20 * time.Second,
-		Debug:               false,
-	})
-	if serr != nil {
-		panic(serr)
-	}
-	//	defer ehSender.Close()
-
-}
-
-func AddOrder(order Order) (orderId string) {
-
-	return orderId
-}
-
-// AddOrderToMongoDB Add the order to MondoDB
-func AddOrderToMongoDB(order Order) (orderId string) {
-
-	session = asession.Copy()
-
-	log.Println("Team " + teamname)
-
-	if partitionKey == "" {
-		partitionKey = "0"
-	}
-
-	/* 	if order.Status == "Kill" {
-		log.Println("Killing")
-	} */
+	// Select a random partition
+	rand.Seed(time.Now().UnixNano())
+	partitionKey := strconv.Itoa(random(0, 11))
+	order.Product = fmt.Sprintf("product-%s", partitionKey)
 
 	NewOrderID := bson.NewObjectId()
-
 	order.ID = NewOrderID.Hex()
 
 	order.Status = "Open"
@@ -206,56 +93,239 @@ func AddOrderToMongoDB(order Order) (orderId string) {
 		order.Source = os.Getenv("SOURCE")
 	}
 
-	database = "k8orders"
-	password = "" //V2
+	log.Print("Mongo URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
 
-	log.Print(mongoURL, isAzure, "AMQP")
+	defer mongoDBSessionCopy.Close()
 
-	//defer asession.Close()
-	defer session.Close()
 	// insert Document in collection
-	serr = collection.Insert(order)
+	mongoDBSessionError = mongoDBCollection.Insert(order)
 	log.Println("_id:", order)
 
-	if serr != nil {
-		log.Fatal("Problem inserting data: ", serr)
+	if mongoDBSessionError != nil {
+		log.Fatal("Problem inserting data: ", mongoDBSessionError)
 		log.Println("_id:", order)
-	}
 
-	//	Let's write only if we have a key
-	if insightskey != "" {
-		client := appinsights.NewTelemetryClient(insightskey)
-		client.TrackEvent("CapureOrder: - Team Name " + teamname + " db " + db)
-	}
-
-	// Now let's place this on the eventhub
-	if eventURL != "" {
-		log.Println("Sending to event hub " + eventURLWithPartition)
-		//	AddOrderToEventHub(order.ID, teamname)
-		AddOrderToEventHubAMQP(order.ID, teamname)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(mongoDBSessionError)
+		}
 	} else {
-		// Let's send to RabbitMQ
-		log.Println("Sending to rabbitmq " + rabbitMQURL)
-		AddOrderToRabbitMQ(order.ID, teamname)
+		success = true
 	}
 
-	return order.ID
+	// Track the event for the challenge purposes
+	challengeTelemetryClient.TrackEvent("CapureOrder: - Team Name " + teamName + " db " + db)
+
+	endTime := time.Now()
+
+	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
+	if customTelemetryClient != nil {
+		dependency := appinsights.NewRemoteDependencyTelemetry(fmt.Sprintf("MongoDB-CosmosDB-%t", isCosmosDb), "MongoDB", mongoURL, success)		
+		dependency.MarkTime(startTime, endTime)
+		customTelemetryClient.Track(dependency)
+	}
+
+	return order
 }
 
-// AddOrder to RabbitMQ
+// AddOrderToAMQP Adds the order to AMQP (EventHub/RabbitMQ)
+func AddOrderToAMQP(order Order) {
+	if isEventHub {
+		addOrderToAMQP10(order)
+	} else {
+		addOrderToAMQP091(order)
+	}
+}
 
-func AddOrderToRabbitMQ(orderId string, orderSource string) {
+//// BEGIN: NON EXPORTED FUNCTIONS
+func init() {
 
-	//Instantiate RabbitMq
-	conn, err := amqp.Dial(rabbitMQURL)
-	failOnError(err, "Failed to connect to RabbitMQ")
-	//	defer conn.Close()
+	// Validate environment variables
+	validateVariable(customInsightsKey, "APPINSIGHTS_KEY")
+	validateVariable(challengeInsightsKey, "CHALLENGEAPPINSIGHTS_KEY")
+	validateVariable(mongoURL, "MONGOURL")
+	validateVariable(amqpURL, "AMQPURL")
+	validateVariable(teamName, "TEAMNAME")
 
-	ch, err := conn.Channel()
-	failOnError(err, "Failed to open a channel")
-	//	defer ch.Close()
+	// Initialize the Application Insights telemtry client(s)
+	challengeTelemetryClient = appinsights.NewTelemetryClient(challengeInsightsKey)
+	if customInsightsKey != "" {
+		customTelemetryClient = appinsights.NewTelemetryClient(customInsightsKey)
+	}
 
-	q, err := ch.QueueDeclare(
+	// Initialize the MongoDB client
+	initMongo()
+
+	// Initialize the AMQP client
+	initAMQP()
+}
+
+// Logs out value of a variable
+func validateVariable(value string, envName string) {
+	if len(value) == 0 {
+		log.Printf("The environment variable %s has not been set", envName)
+	} else {
+		log.Printf("The environment variable %s is %s", envName, value)
+	}
+}
+
+// Initialize the MongoDB client
+func initMongo() {
+	url, err := url.Parse(mongoURL)
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Problem parsing Mongo URL %s: ",url), err)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(err)
+		}
+	}
+
+	if isCosmosDb {
+		log.Println("Using CosmosDB")
+		db = "CosmosDB"
+
+	} else {
+		log.Println("Using MongoDB")
+		db = "MongoDB"
+	}
+
+	// Parse the connection string to extract components because the MongoDB driver is peculiar
+	var dialInfo *mgo.DialInfo
+	mongoUsername := ""
+	mongoPassword := ""
+	if url.User!=nil {
+		mongoUsername = url.User.Username()
+		mongoPassword, _ = url.User.Password()
+	}
+	mongoHost := url.Host
+	mongoDatabase := "db" // can be anything
+	mongoSSL := strings.Contains(url.RawQuery, "ssl=true")
+
+	log.Printf("\tUsername: %s", mongoUsername)
+	log.Printf("\tPassword: %s", mongoPassword)
+	log.Printf("\tHost: %s", mongoHost)
+	log.Printf("\tDatabase: %s", mongoDatabase)
+	log.Printf("\tSSL: %t", mongoSSL)
+
+	if mongoSSL {
+		dialInfo = &mgo.DialInfo{
+			Addrs:    []string{mongoHost},
+			Timeout:  60 * time.Second,
+			Database: mongoDatabase, // It can be anything
+			Username: mongoUsername, // Username
+			Password: mongoPassword, // Password
+			DialServer: func(addr *mgo.ServerAddr) (net.Conn, error) {
+				return tls.Dial("tcp", addr.String(), &tls.Config{})
+			},
+		}
+	} else {
+		dialInfo = &mgo.DialInfo{
+			Addrs:    []string{mongoHost},
+			Timeout:  60 * time.Second,
+			Database: mongoDatabase, // It can be anything
+			Username: mongoUsername, // Username
+			Password: mongoPassword, // Password
+		}
+	}
+
+	// Create a mongoDBSession which maintains a pool of socket connections
+	// to our MongoDB.
+	mongoDBSession, mongoDBSessionError = mgo.DialWithInfo(dialInfo)
+	if mongoDBSessionError != nil {
+		log.Fatal(fmt.Sprintf("Can't connect to mongo at [%s], go error: ", mongoURL), mongoDBSessionError)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(mongoDBSessionError)
+		}
+		os.Exit(1)
+	}
+	mongoDBSessionCopy = mongoDBSession.Copy()
+		
+
+	// SetSafe changes the mongoDBSessionCopy safety mode.
+	// If the safe parameter is nil, the mongoDBSessionCopy is put in unsafe mode, and writes become fire-and-forget,
+	// without error checking. The unsafe mode is faster since operations won't hold on waiting for a confirmation.
+	// http://godoc.org/labix.org/v2/mgo#Session.SetMode.
+	mongoDBSessionCopy.SetSafe(nil)
+
+	// Create a sharded collection and retrieve it
+	result := bson.M{}
+	err = mongoDBSessionCopy.DB(mongoDatabaseName).Run(
+		bson.D{
+			{
+				"shardCollection",
+				fmt.Sprintf("%s.%s",mongoDatabaseName,mongoCollectionName),
+			},
+			{
+				"key",
+				bson.M{
+					mongoCollectionShardKey: "hashed",
+				},
+			},
+		}, &result);
+
+	if err != nil {
+		// The collection is most likely created and already sharded. I couldn't find a more elegant way to check this.
+		log.Println("Could not create/re-create sharded MongoDB collection. Either collection is already sharded or sharding is not supported: ", err)
+	} else {
+		log.Println("Created MongoDB collection: ")
+		log.Println(result)
+	}
+
+	// Get collection
+	mongoDBCollection = mongoDBSessionCopy.DB(mongoDatabaseName).C(mongoCollectionName)
+}
+
+// Initalize AMQP by figuring out where we are running
+func initAMQP() {
+	url, err := url.Parse(amqpURL)
+	if err != nil {
+		log.Fatal(fmt.Sprintf("Problem parsing AMQP Host %s: ",url), err)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(err)
+		}
+	}
+
+	// Figure out if we're running on EventHub or elsewhere
+	if isEventHub {
+		log.Println("Using EventHub")
+		queueType = "EventHub"
+
+		// Parse the eventHubName (last part of the url)
+		eventHubName = url.Path
+	} else {
+		log.Println("Using RabbitMQ")
+		queueType = "RabbitMQ"
+	}
+	log.Println("\tAMQP URL: " + amqpURL)
+}
+
+// addOrderToAMQP091 Adds the order to AMQP 0.9.1
+func addOrderToAMQP091(order Order) {
+	success := false
+	startTime := time.Now()
+	body := fmt.Sprintf("{{'order': '%s', 'source': '%s'}}", order.ID, teamName)
+
+	amqp091Client, err := amqp091.Dial(amqpURL)
+	if err != nil {
+		log.Fatal("Creating client: ", err)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(err)
+		}
+	}
+
+	amqp091Channel, err := amqp091Client.Channel()
+	if err != nil {
+		log.Fatal("Creating channel: ", err)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(err)
+		}
+	}
+
+	amqp091Queue, err := amqp091Channel.QueueDeclare(
 		"order", // name
 		true,    // durable
 		false,   // delete when unused
@@ -263,100 +333,122 @@ func AddOrderToRabbitMQ(orderId string, orderSource string) {
 		false,   // no-wait
 		nil,     // arguments
 	)
-	failOnError(err, "Failed to declare a queue")
 
-	body := "{'order':" + "'" + orderId + "', 'source':" + "'" + orderSource + "'}"
-	err = ch.Publish(
+	// Send message
+	err = amqp091Channel.Publish(
 		"",     // exchange
-		q.Name, // routing key
+		amqp091Queue.Name, // routing key
 		false,  // mandatory
 		false,  // immediate
-		amqp.Publishing{
-			DeliveryMode: amqp.Persistent,
+		amqp091.Publishing{
+			DeliveryMode: amqp091.Persistent,
 			ContentType:  "application/json",
 			Body:         []byte(body),
 		})
-	log.Printf(" [x] Sent %s " + body + " queue:" + q.Name)
-	failOnError(err, "Failed to publish a message")
-}
-
-func failOnError(err error, msg string) {
 	if err != nil {
-		log.Fatalf("%s: %s", msg, err)
-		panic(fmt.Sprintf("%s: %s", msg, err))
+		log.Fatal("Sending message:", err)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(err)
+		}
+	} else {
+		success = true
 	}
+
+	endTime := time.Now()
+
+	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
+	if customTelemetryClient != nil {
+		dependency := appinsights.NewRemoteDependencyTelemetry(fmt.Sprintf("AMQP-RabbitMQ-%t", isEventHub), "RabbitMQ", amqpURL, success)		
+		dependency.MarkTime(startTime, endTime)
+		customTelemetryClient.Track(dependency)
+	}
+
+	log.Printf("Sent to AMQP 0.9.1 (RabbitMQ) - %t, %s: %s", success, amqpURL, body)
 }
 
-// AddOrderToEventHub adds it to an event hub
-func AddOrderToEventHub(orderId string, orderSource string) {
+// addOrderToAMQP10 Adds the order to AMQP 1.0 (sends to the Default ConsumerGroup)
+func addOrderToAMQP10(order Order) {
+	success := false
+	startTime := time.Now()
+	body := fmt.Sprintf("{{'order': '%s', 'source': '%s'}}", order.ID, teamName)
 
-	rand.Seed(time.Now().UnixNano())
-	partitionKey := strconv.Itoa(random(0, 3))
-	eventURLWithPartition = os.Getenv("EVENTURL") + "/partitions/" + partitionKey + "/messages"
-
-	log.Println("SaS pre ", eventURLWithPartition, eventPolicyName, eventPolicyKey)
-	SaS := createSharedAccessToken(strings.TrimSpace(eventURLWithPartition), strings.TrimSpace(eventPolicyName), strings.TrimSpace(eventPolicyKey))
-	log.Println("SaS post ", SaS)
-
-	log.Println("evenurlwith partition  ", eventURLWithPartition)
-
-	tr := &http.Transport{DisableKeepAlives: false}
-	req, _ := http.NewRequest("POST", eventURLWithPartition, strings.NewReader("{'order':"+"'"+orderId+"', 'source':"+"'"+orderSource+"'}"))
-	req.Header.Set("Authorization", SaS)
-	req.Close = false
-
-	res, err := tr.RoundTrip(req)
+	amqp10Client, err := amqp10.Dial(amqpURL)
 	if err != nil {
-		fmt.Println(res, err)
+		log.Fatal("Creating client: ", err)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(err)
+		}
+	}
+	defer amqp10Client.Close()
+
+	// Send to AMQP
+	amqp10Session, err := amqp10Client.NewSession()	
+	if err != nil {
+		log.Fatal("Creating session: ", err)
+		// If the team provided an Application Insights key, let's track that exception
+		if customTelemetryClient != nil {
+			customTelemetryClient.TrackException(err)
+		}
 	}
 
-}
 
-func createSharedAccessToken(uri string, saName string, saKey string) string {
+	// Get a context
+	amqp10Context := context.Background()
+	{
+		// Include a random partition
+		rand.Seed(time.Now().UnixNano())
+		partitionKey := strconv.Itoa(random(0, 3))
+		targetAddress := fmt.Sprintf("%s/partitions/%s", eventHubName, partitionKey)
 
-	if len(uri) == 0 || len(saName) == 0 || len(saKey) == 0 {
-		return "Missing required parameter"
+		log.Printf("AMQP URL: %s, Target: %s", amqpURL, targetAddress)
+
+		sender, err := amqp10Session.NewSender(
+			amqp10.LinkTargetAddress(targetAddress),
+		)
+		if err != nil {
+			log.Fatal("Creating sender link: ", err)
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+		}
+
+		amqp10Context, cancel := context.WithTimeout(amqp10Context, 5*time.Second)
+
+		// Send message
+		err = sender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
+		if err != nil {
+			log.Fatal("Sending message:", err)
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+		} else {
+			success = true
+		}
+
+
+		cancel()
+		sender.Close()
 	}
 
-	encoded := template.URLQueryEscaper(uri)
-	now := time.Now().Unix()
-	week := 60 * 60 * 24 * 7
-	ts := now + int64(week)
-	signature := encoded + "\n" + strconv.Itoa(int(ts))
-	key := []byte(saKey)
-	hmac := hmac.New(sha256.New, key)
-	hmac.Write([]byte(signature))
-	hmacString := template.URLQueryEscaper(base64.StdEncoding.EncodeToString(hmac.Sum(nil)))
+	endTime := time.Now()
 
-	result := "SharedAccessSignature sr=" + encoded + "&sig=" +
-		hmacString + "&se=" + strconv.Itoa(int(ts)) + "&skn=" + saName
-	return result
+	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
+	if customTelemetryClient != nil {
+		dependency := appinsights.NewRemoteDependencyTelemetry(fmt.Sprintf("AMQP-EventHub-%t", isEventHub), "EventHub", amqpURL, success)		
+		dependency.MarkTime(startTime, endTime)
+		customTelemetryClient.Track(dependency)
+	}
+
+	log.Printf("Sent to AMQP 1.0 (EventHub) - %t, %s: %s", success, amqpURL, body)
 }
 
+// random: Generates a random number
 func random(min int, max int) int {
 	return rand.Intn(max-min) + min
 }
 
-// AddOrderToEventHubAMQP adds it to an event hub
-func AddOrderToEventHubAMQP(orderId string, orderSource string) {
-
-	/*
-		go func(s eventhub.Sender) {
-			log.Println("Setting up the error channel...\n")
-			for err := range s.ErrorChan() {
-				if err != nil {
-					log.Println("Just received an error: '%v'\n", err)
-					panic(err)
-				}
-			}
-		}(ehSender)
-	*/
-	log.Println("Now sending the order!\n")
-
-	// Send Async
-	// ------------------------------------
-	uniqueID := ehSender.SendAsync("{'order':" + "'" + orderId + "', 'source':" + "'" + orderSource + "'}")
-	idstring := strconv.FormatInt(int64(uniqueID), 10)
-	log.Println("The order sent", idstring)
-
-}
+//// END: NON EXPORTED FUNCTIONS
