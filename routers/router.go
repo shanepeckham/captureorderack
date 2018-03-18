@@ -8,8 +8,10 @@
 package routers
 
 import (
-	"captureorderfd/controllers"
+	// "captureorderfd/controllers"
+	"github.com/shanepeckham/captureorderack/controllers"
 
+	// "github.com/astaxie/beego"
 	"github.com/astaxie/beego"
 )
 

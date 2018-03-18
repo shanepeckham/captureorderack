@@ -1,7 +1,8 @@
 package main
 
 import (
-	_ "captureorderfd/routers"
+	// _ "captureorderfd/routers"
+	_ "github.com/shanepeckham/captureorderack/routers"
 
 	"github.com/astaxie/beego"
 )
