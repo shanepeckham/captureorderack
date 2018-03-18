@@ -2,9 +2,13 @@ FROM golang:1.8.3-alpine3.6
 
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:$PATH
-
+RUN cd
+WORKDIR src/hackcaptureorder
 # Run a gofmt and exclude all vendored code.
 RUN test -z "$(gofmt -l $(find . -type f -name '*.go' -not -path "./vendor/*" -not -path "./function/vendor/*"))" || { echo "Run \"gofmt -s -w\" on your Golang code"; exit 1; }
+
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=386 go build
+
 
 FROM alpine:3.6
 RUN apk --no-cache add ca-certificates
@@ -17,7 +21,7 @@ RUN chown app /go/src/github.com/shanepeckham/captureorderack/
 WORKDIR /go/src/github.com/shanepeckham/captureorderack/
 
 # Copy the application files (needed for production)
-ADD . /go/src/hackcaptureorder/hackcaptureorder
+COPY . . 
 
 USER app
 
@@ -38,4 +42,4 @@ EXPOSE 8080
 # Set the entry point of the container to the bee command that runs the
 # application and watches for changes
 
-CMD ["./captureorderack"]
+CMD ["./hackcaptureorder"]
