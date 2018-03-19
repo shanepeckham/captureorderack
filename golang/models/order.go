@@ -120,7 +120,11 @@ func AddOrderToMongoDB(order Order) Order {
 
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
 	if customTelemetryClient != nil {
-		dependency := appinsights.NewRemoteDependencyTelemetry(fmt.Sprintf("MongoDB-CosmosDB-%t", isCosmosDb), "MongoDB", mongoURL, success)		
+		if isCosmosDb {
+			dependency := appinsights.NewRemoteDependencyTelemetry("CosmosDB", "MongoDB", mongoURL, success)		
+		} else {
+			dependency := appinsights.NewRemoteDependencyTelemetry("MongoDB", "MongoDB", mongoURL, success)		
+		}
 		dependency.MarkTime(startTime, endTime)
 		customTelemetryClient.Track(dependency)
 	}
@@ -359,7 +363,7 @@ func addOrderToAMQP091(order Order) {
 
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
 	if customTelemetryClient != nil {
-		dependency := appinsights.NewRemoteDependencyTelemetry(fmt.Sprintf("AMQP-RabbitMQ-%t", isEventHub), "RabbitMQ", amqpURL, success)		
+		dependency := appinsights.NewRemoteDependencyTelemetry("AMQP-RabbitMQ", "RabbitMQ", amqpURL, success)		
 		dependency.MarkTime(startTime, endTime)
 		customTelemetryClient.Track(dependency)
 	}
@@ -438,7 +442,7 @@ func addOrderToAMQP10(order Order) {
 
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
 	if customTelemetryClient != nil {
-		dependency := appinsights.NewRemoteDependencyTelemetry(fmt.Sprintf("AMQP-EventHub-%t", isEventHub), "EventHub", amqpURL, success)		
+		dependency := appinsights.NewRemoteDependencyTelemetry("AMQP-EventHub", "EventHub", amqpURL, success)		
 		dependency.MarkTime(startTime, endTime)
 		customTelemetryClient.Track(dependency)
 	}

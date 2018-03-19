@@ -115,9 +115,10 @@ namespace OrderCaptureAPI.Services
             {
                 if(_customTelemetryClient!=null) {
                     if (_isCosmosDb)
-                        _customTelemetryClient.TrackDependency($"CosmosDB", "Send", startTime, timer.Elapsed, success);
+                        _customTelemetryClient.TrackDependency($"CosmosDB", MongoClientSingleton.Instance.Settings.Server.ToString(), "MongoDB", "", startTime, timer.Elapsed, success ? "200" : "500", success);
+                        
                     else
-                        _customTelemetryClient.TrackDependency($"MongoDB", "Send", startTime, timer.Elapsed, success);
+                        _customTelemetryClient.TrackDependency($"MongoDB", MongoClientSingleton.Instance.Settings.Server.ToString(), "MongoDB", "", startTime, timer.Elapsed, success ? "200" : "500", success);
                 }
             }
         }
@@ -155,7 +156,7 @@ namespace OrderCaptureAPI.Services
             finally
             {
                 if(_customTelemetryClient!=null)
-                    _customTelemetryClient.TrackDependency($"AMQP-EventHub", "Send", startTime, timer.Elapsed, success);
+                    _customTelemetryClient.TrackDependency($"AMQP-EventHub", AMQP10ClientSingleton.AMQPUrl, "AMQP", "", startTime, timer.Elapsed, success ? "200" : "500", success);
             }
         }
 
@@ -206,7 +207,7 @@ namespace OrderCaptureAPI.Services
             finally
             {
                 if(_customTelemetryClient!=null)
-                    _customTelemetryClient.TrackDependency($"AMQP-RabbitMQ", "Send", startTime, timer.Elapsed, success);
+                    _customTelemetryClient.TrackDependency($"AMQP-RabbitMQ", AMQP091ClientSingleton.AMQPUrl, "AMQP", "", startTime, timer.Elapsed, success ? "200" : "500", success);                    
             }
         }
         #endregion
