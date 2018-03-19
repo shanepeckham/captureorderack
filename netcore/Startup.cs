@@ -12,6 +12,7 @@ using Microsoft.AspNetCore.Mvc.Versioning;
 using Microsoft.AspNetCore.Mvc.ApiExplorer;
 using Swashbuckle.AspNetCore.Swagger;
 using OrderCaptureAPI.Util;
+using Microsoft.ApplicationInsights;
 
 namespace OrderCaptureAPI
 {
@@ -28,6 +29,7 @@ namespace OrderCaptureAPI
         public void ConfigureServices(IServiceCollection services)
         {
             services.AddApplicationInsightsTelemetry("23c6b1ec-ca92-4083-86b6-eba851af9032");
+            
 
             services.AddLogging();  
 
@@ -75,6 +77,9 @@ namespace OrderCaptureAPI
 
             //loggerFactory.AddConsole();
             //loggerFactory.AddDebug();
+
+            // Configure Application Insights additional context
+            app.ApplicationServices.GetService<TelemetryClient>().Context.Properties["Language"] = "netcore";
 
             app.UseMvc();
             app.UseSwagger();

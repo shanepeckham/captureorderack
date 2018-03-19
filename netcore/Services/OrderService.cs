@@ -11,6 +11,7 @@ namespace OrderCaptureAPI.Services
     using Amqp.Framing;
     using MongoDB.Bson;
     using System.Text;
+    using Microsoft.ApplicationInsights.DataContracts;
 
     public class OrderService
     {
@@ -114,12 +115,29 @@ namespace OrderCaptureAPI.Services
             finally
             {
                 if(_customTelemetryClient!=null) {
-                    if (_isCosmosDb)
-                        _customTelemetryClient.TrackDependency($"CosmosDB", MongoClientSingleton.Instance.Settings.Server.ToString(), "MongoDB", "", startTime, timer.Elapsed, success ? "200" : "500", success);
-                        
-                    else
-                        _customTelemetryClient.TrackDependency($"MongoDB", MongoClientSingleton.Instance.Settings.Server.ToString(), "MongoDB", "", startTime, timer.Elapsed, success ? "200" : "500", success);
-                }
+                    if (_isCosmosDb) {
+                        var dependency = new DependencyTelemetry { 
+                            Name= "CosmosDB",
+                            Type = "MongoDB",
+                            Target = MongoClientSingleton.Instance.Settings.Server.ToString(),
+                            Data = "Insert order",
+                            Duration = timer.Elapsed,
+                            Success = success
+                        };
+                        _customTelemetryClient.TrackDependency(dependency);                        
+                    }
+                    else {
+                        var dependency = new DependencyTelemetry { 
+                            Name= "MongoDB",
+                            Type = "MongoDB",
+                            Target = MongoClientSingleton.Instance.Settings.Server.ToString(),
+                            Data = "Insert order",
+                            Duration = timer.Elapsed,
+                            Success = success
+                        };
+                        _customTelemetryClient.TrackDependency(dependency);   
+                    }
+                 }
             }
         }
 
@@ -155,8 +173,17 @@ namespace OrderCaptureAPI.Services
             }
             finally
             {
-                if(_customTelemetryClient!=null)
-                    _customTelemetryClient.TrackDependency($"AMQP-EventHub", AMQP10ClientSingleton.AMQPUrl, "AMQP", "", startTime, timer.Elapsed, success ? "200" : "500", success);
+                if(_customTelemetryClient!=null) {
+                        var dependency = new DependencyTelemetry { 
+                            Name= "EventHub",
+                            Type = "AMQP",
+                            Target = AMQP10ClientSingleton.AMQPUrl,
+                            Data = "Send message",
+                            Duration = timer.Elapsed,
+                            Success = success
+                        };
+                        _customTelemetryClient.TrackDependency(dependency);     
+                }
             }
         }
 
@@ -206,8 +233,17 @@ namespace OrderCaptureAPI.Services
             }
             finally
             {
-                if(_customTelemetryClient!=null)
-                    _customTelemetryClient.TrackDependency($"AMQP-RabbitMQ", AMQP091ClientSingleton.AMQPUrl, "AMQP", "", startTime, timer.Elapsed, success ? "200" : "500", success);                    
+                if(_customTelemetryClient!=null) {
+                        var dependency = new DependencyTelemetry { 
+                            Name= "RabbitMQ",
+                            Type = "AMQP",
+                            Target = AMQP091ClientSingleton.AMQPUrl,
+                            Data = "Send message",
+                            Duration = timer.Elapsed,
+                            Success = success
+                        };
+                        _customTelemetryClient.TrackDependency(dependency);     
+                }
             }
         }
         #endregion

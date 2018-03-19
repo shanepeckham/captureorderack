@@ -41,7 +41,7 @@ namespace OrderCaptureAPI.Singetons
 
             var rnd = new Random(DateTime.Now.Millisecond);
             int partition = rnd.Next(3);
-            _amqpUrl += _amqpUrl + "/partitions/" + partition.ToString();
+            _amqpUrl += "/partitions/" + partition.ToString();
 
             // Initialize the SenderLink singleton
             _amqpAddress = new Address(_amqpUrl);

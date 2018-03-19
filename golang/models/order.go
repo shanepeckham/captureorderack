@@ -121,12 +121,24 @@ func AddOrderToMongoDB(order Order) Order {
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
 	if customTelemetryClient != nil {
 		if isCosmosDb {
-			dependency := appinsights.NewRemoteDependencyTelemetry("CosmosDB", "MongoDB", mongoURL, success)		
+			dependency := appinsights.NewRemoteDependencyTelemetry(
+				"CosmosDB",
+				"MongoDB",
+				mongoURL,
+				success)
+			dependency.Data = "Insert order"			
+			dependency.MarkTime(startTime, endTime)
+			customTelemetryClient.Track(dependency)	
 		} else {
-			dependency := appinsights.NewRemoteDependencyTelemetry("MongoDB", "MongoDB", mongoURL, success)		
+			dependency := appinsights.NewRemoteDependencyTelemetry(
+				"MongoDB",
+				"MongoDB",
+				mongoURL,
+				success)
+			dependency.Data = "Insert order"	
+			dependency.MarkTime(startTime, endTime)
+			customTelemetryClient.Track(dependency)		
 		}
-		dependency.MarkTime(startTime, endTime)
-		customTelemetryClient.Track(dependency)
 	}
 
 	return order
@@ -363,7 +375,12 @@ func addOrderToAMQP091(order Order) {
 
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
 	if customTelemetryClient != nil {
-		dependency := appinsights.NewRemoteDependencyTelemetry("AMQP-RabbitMQ", "RabbitMQ", amqpURL, success)		
+		dependency := appinsights.NewRemoteDependencyTelemetry(
+			"RabbitMQ",
+			"AMQP",
+			amqpURL,
+			success)		
+			dependency.Data = "Send message"			
 		dependency.MarkTime(startTime, endTime)
 		customTelemetryClient.Track(dependency)
 	}
@@ -442,7 +459,12 @@ func addOrderToAMQP10(order Order) {
 
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
 	if customTelemetryClient != nil {
-		dependency := appinsights.NewRemoteDependencyTelemetry("AMQP-EventHub", "EventHub", amqpURL, success)		
+		dependency := appinsights.NewRemoteDependencyTelemetry(
+			"EventHub",
+			"AMQP",
+			amqpURL,
+			success)
+		dependency.Data = "Send message"		
 		dependency.MarkTime(startTime, endTime)
 		customTelemetryClient.Track(dependency)
 	}
