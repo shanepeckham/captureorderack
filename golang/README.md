@@ -1,30 +1,56 @@
-# CaptureOrder - TACK - golang
+# CaptureOrder  - TACK
 
-A containerised Go swagger API to capture orders, write them to MongoDb.
+A containerised Go swagger API to capture orders, write them to MongoDb and an AMQP message queue.
+
+## Usage
+### Swagger
+
+Access the Swagger UI at [http://[host]/swagger]()
+
+### Submitting an order
+
+```
+POST /v1/Order HTTP/1.1
+Host: [host]:[port]
+Content-Type: application/json
+
+{
+  "EmailAddress": "test@domain.com",
+  "PreferredLanguage": "en"
+}
+```
+
+## Environment Variables
 
 The following environment variables need to be passed to the container:
 
-### ACK Logging
+### Logging
+
 ```
 ENV TEAMNAME=[YourTeamName]
+ENV APPINSIGHTS_KEY=[YourCustomApplicationInsightsKey]
 ```
-### For Mongo
+
+### For MongoDB
+
 ```
-ENV MONGOHOST="mongodb://[mongoinstance].[namespace]"
+ENV MONGOURL=mongodb://[mongoinstance].[namespace]
+```
+
+### For CosmosDB
+
+```
+ENV MONGOURL=mongodb://[CosmosDBInstanceName]:[CosmosDBPrimaryPassword]=@[CosmosDBInstanceName].documents.azure.com:10255/?ssl=true&replicaSet=globaldb
 ```
 
 ### For RabbitMQ
+
 ```
-ENV RABBITMQHOST=amqp://[url]:5672
-ENV PARTITIONKEY=[0,1,2]
+ENV AMQPURL=amqp://[url]:5672
 ```
+
 ### For Event Hubs
+
 ```
-ENV EVENTURL="https://[youreventhub].servicebus.windows.net/[eventhubname]"
-
-ENV EVENTPOLICYNAME="[policy key name]"
-
-ENV EVENTPOLICYKEY="[policy key]"
-
-ENV PARTITIONKEY=[0,1,2]
+ENV AMQPURL=amqps://[policy name]:[policy key]@[youreventhub].servicebus.windows.net/[eventhubname]
 ```

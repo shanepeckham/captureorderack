@@ -22,7 +22,16 @@ func (this *OrderController) Post() {
 
 	var ob models.Order
 	json.Unmarshal(this.Ctx.Input.RequestBody, &ob)
-	orderID := models.AddOrderToMongoDB(ob)
-	this.Data["json"] = map[string]string{"orderId": orderID}
+
+
+	// Add the order to MongoDB
+	addedOrder := models.AddOrderToMongoDB(ob)
+
+	// Add the order to AMQP
+	models.AddOrderToAMQP(addedOrder)
+
+	// return
+	this.Data["json"] = map[string]string{"orderId": addedOrder.ID}
 	this.ServeJSON()
 }
+

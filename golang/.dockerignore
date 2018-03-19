@@ -1,0 +1,12 @@
+.vscode
+bundles
+.gopath
+vendor/pkg
+.go-pkg-cache
+.git
+docker.sh
+README.md
+tests
+Dockerfile
+env.cosmos.eventhub.list
+env.mongo.rabbit.list
