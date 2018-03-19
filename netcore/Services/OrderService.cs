@@ -10,6 +10,7 @@ namespace OrderCaptureAPI.Services
     using Amqp;
     using Amqp.Framing;
     using MongoDB.Bson;
+    using System.Text;
 
     public class OrderService
     {
@@ -19,6 +20,7 @@ namespace OrderCaptureAPI.Services
         private IMongoCollection<Order> ordersCollection;
         private readonly ILogger _logger;
         private readonly TelemetryClient _telemetryClient;
+        private readonly TelemetryClient _customTelemetryClient;
         private bool _isCosmosDb;
         private bool _isEventHub;
         #endregion
@@ -30,25 +32,46 @@ namespace OrderCaptureAPI.Services
             _logger = loggerFactory.CreateLogger("OrderService");
             _telemetryClient = telemetryClient;
 
+            // Initialize custom telemetry client, if the key is provided
+            var customInsightsKey = System.Environment.GetEnvironmentVariable("APPINSIGHTS_KEY");
+            if (!string.IsNullOrEmpty(customInsightsKey))
+            {
+                _customTelemetryClient = new TelemetryClient();
+                _customTelemetryClient.InstrumentationKey = customInsightsKey;
+            }
+
             // Initialize the class using environment variables
             _teamName = System.Environment.GetEnvironmentVariable("TEAMNAME");
 
             // Initialize MongoDB
             // Figure out if this is running on CosmosDB
-            var mongoHost = MongoClientSingleton.Instance.Settings.Server.ToString();
-            _isCosmosDb = mongoHost.Contains("documents.azure.com");
-            _logger.LogInformation($"Cosmos DB: {_isCosmosDb}");
-            _logger.LogInformation($"MongoHost: {mongoHost}");
+            var mongoURL = MongoClientSingleton.Instance.Settings.Server.ToString();
+            _isCosmosDb = mongoURL.Contains("documents.azure.com");
 
             // Initialize AMQP
-            var amqpHost = AMQPClientSingleton.AMQPHost;
-            _isEventHub = amqpHost.Contains("servicebus.windows.net");
+            var amqpURL = System.Environment.GetEnvironmentVariable("AMQPURL");
+            _isEventHub = amqpURL.Contains("servicebus.windows.net");
+
+            // Log out the env variables
+            ValidateVariable(customInsightsKey, "APPINSIGHTS_KEY");
+            ValidateVariable(mongoURL, "MONGOURL");
+            _logger.LogInformation($"Cosmos DB: {_isCosmosDb}");
+            ValidateVariable(amqpURL, "AMQPURL");
             _logger.LogInformation($"Event Hub: {_isEventHub}");
-            _logger.LogInformation($"AMQP Host: {AMQPClientSingleton.AMQPHost}");
+            ValidateVariable(_teamName, "TEAMNAME");
         }
         #endregion
 
         #region Methods
+
+        // Logs out value of a variable
+        public void ValidateVariable(string value, string envName)
+        {
+            if (string.IsNullOrEmpty(value))
+                _logger.LogInformation($"The environment variable {envName} has not been set");
+            else
+                _logger.LogInformation($"The environment variable {envName} is {value}");
+        }
         public async Task<string> AddOrderToMongoDB(Order order)
         {
 
@@ -84,16 +107,32 @@ namespace OrderCaptureAPI.Services
             catch (Exception ex)
             {
                 _logger.LogCritical(ex, ex.Message, order);
-                _telemetryClient.TrackException(ex);
+                if(_customTelemetryClient!=null)
+                    _customTelemetryClient.TrackException(ex);
                 throw;
             }
             finally
             {
-                _telemetryClient.TrackDependency($"MongoDB-CosmosDB-{_isCosmosDb}", "Send", startTime, timer.Elapsed, success);
+                if(_customTelemetryClient!=null) {
+                    if (_isCosmosDb)
+                        _customTelemetryClient.TrackDependency($"CosmosDB", "Send", startTime, timer.Elapsed, success);
+                    else
+                        _customTelemetryClient.TrackDependency($"MongoDB", "Send", startTime, timer.Elapsed, success);
+                }
             }
         }
 
         public async Task AddOrderToAMQP(Order order)
+        {
+            if (_isEventHub)
+                await AddOrderToAMQP10(order);
+            else
+            {
+                await AddOrderToAMQP091(order);
+            }
+        }
+
+        private async Task AddOrderToAMQP10(Order order)
         {
             var startTime = DateTime.UtcNow;
             var timer = System.Diagnostics.Stopwatch.StartNew();
@@ -102,19 +141,72 @@ namespace OrderCaptureAPI.Services
             {
                 // Send to AMQP
                 var amqpMessage = new Message($"{{'order': '{order.Id}', 'source': '{_teamName}'}}");
-                await AMQPClientSingleton.Instance.SendAsync(amqpMessage);
-                _logger.LogTrace("Sent message to AMQP");
+                await AMQP10ClientSingleton.Instance.SendAsync(amqpMessage);
+                _logger.LogTrace($"Sent message to AMQP 1.0 (EventHub) {AMQP10ClientSingleton.AMQPUrl} {amqpMessage.ToJson()}");
                 success = true;
             }
             catch (Exception ex)
             {
                 _logger.LogCritical(ex, ex.Message, order);
-                _telemetryClient.TrackException(ex);
+                if(_customTelemetryClient!=null)
+                    _customTelemetryClient.TrackException(ex);
                 throw;
             }
             finally
             {
-                _telemetryClient.TrackDependency($"AMQP-EventHub-{_isEventHub}", "Send", startTime, timer.Elapsed, success);
+                if(_customTelemetryClient!=null)
+                    _customTelemetryClient.TrackDependency($"AMQP-EventHub", "Send", startTime, timer.Elapsed, success);
+            }
+        }
+
+        private async Task AddOrderToAMQP091(Order order)
+        {
+            var startTime = DateTime.UtcNow;
+            var timer = System.Diagnostics.Stopwatch.StartNew();
+            var success = false;
+            try
+            {
+                await Task.Run(() =>
+                {
+                    // Send to AMQP
+                    var connection = AMQP091ClientSingleton.AMQPConnectionFactory.CreateConnection();
+
+                    using (var channel = connection.CreateModel())
+                    {
+                        channel.QueueDeclare(
+                            queue: "order",
+                            durable: true,
+                            exclusive: false,
+                            autoDelete: false,
+                            arguments: null);
+
+                        var amqpMessage = $"{{'order': '{order.Id}', 'source': '{_teamName}'}}";
+                        var body = Encoding.UTF8.GetBytes(amqpMessage);
+
+                        channel.BasicPublish(
+                            exchange: "",
+                            mandatory:false,
+                            routingKey: "order",
+                            basicProperties: null,
+                            body: body);
+
+                        _logger.LogTrace($"Sent message to AMQP 0.9.1 (RabbitMQ) {AMQP091ClientSingleton.AMQPUrl} {amqpMessage}");
+                    }
+                });
+
+                success = true;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogCritical(ex, ex.Message, order);
+                if(_customTelemetryClient!=null)
+                    _customTelemetryClient.TrackException(ex);
+                throw;
+            }
+            finally
+            {
+                if(_customTelemetryClient!=null)
+                    _customTelemetryClient.TrackDependency($"AMQP-RabbitMQ", "Send", startTime, timer.Elapsed, success);
             }
         }
         #endregion

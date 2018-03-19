@@ -21,11 +21,11 @@ namespace OrderCaptureAPI.Singetons
         private MongoClientSingleton()
         {
             // Retrieve the MongoURL from the Environment Variables
-            var mongoURL = System.Environment.GetEnvironmentVariable("MONGOHOST");
+            var mongoURL = System.Environment.GetEnvironmentVariable("MONGOURL");
 
             // Validate and throw an exception if invalid
             if (!System.Uri.IsWellFormedUriString(mongoURL, UriKind.Absolute))
-                throw new ArgumentException("Unable to parse MONGOHOST as a Uri.");
+                throw new ArgumentException("Unable to parse MONGOURL as a Uri.");
 
             // Initialize the MongoClient singleton
             _mongoClientInstance =  new MongoClient(mongoURL);

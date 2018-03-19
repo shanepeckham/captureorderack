@@ -27,18 +27,7 @@ namespace OrderCaptureAPI
         // This method gets called by the runtime. Use this method to add services to the container.
         public void ConfigureServices(IServiceCollection services)
         {
-            var insightsKey = System.Environment.GetEnvironmentVariable("APPINSIGHTS_KEY");
-            if (string.IsNullOrEmpty(insightsKey))
-            {
-                // Use the OpenHack Application Insights
-                services.AddApplicationInsightsTelemetry("23c6b1ec-ca92-4083-86b6-eba851af9032");
-            }
-            else
-            {
-                // Use your own Application Insights
-                // Warning: We will not be able to track you or give points!
-                services.AddApplicationInsightsTelemetry(insightsKey);
-            }
+            services.AddApplicationInsightsTelemetry("23c6b1ec-ca92-4083-86b6-eba851af9032");
 
             services.AddLogging();  
 
