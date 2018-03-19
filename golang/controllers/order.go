@@ -23,6 +23,7 @@ func (this *OrderController) Post() {
 	var ob models.Order
 	json.Unmarshal(this.Ctx.Input.RequestBody, &ob)
 
+
 	// Add the order to MongoDB
 	addedOrder := models.AddOrderToMongoDB(ob)
 
@@ -33,3 +34,4 @@ func (this *OrderController) Post() {
 	this.Data["json"] = map[string]string{"orderId": addedOrder.ID}
 	this.ServeJSON()
 }
+
