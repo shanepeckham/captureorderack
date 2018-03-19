@@ -1,6 +1,9 @@
-FROM golang:latest
+FROM golang:1.10.0-alpine3.7 AS build-env
 ENV GOPATH /go
 ENV PATH $GOPATH/bin:$PATH
+
+RUN apk --update add curl git
+
 # Set the working directory to the app directory
 WORKDIR /go/src/github.com/shanepeckham/captureorderack/
 
@@ -16,8 +19,15 @@ COPY . .
 # Restore dependancies with dep 
 RUN dep ensure -v
 # Build binary
-RUN go build .
+RUN go build -o ./build/captureorder .
 
+# final stage
+FROM alpine:3.7
+WORKDIR /app
+COPY --from=build-env /go/src/github.com/shanepeckham/captureorderack/build /app/
+COPY --from=build-env /go/src/github.com/shanepeckham/captureorderack/conf/app.prod.conf /app/conf/app.conf
+COPY --from=build-env /go/src/github.com/shanepeckham/captureorderack/swagger /app/swagger
+RUN chmod 777 /app/swagger
 # EH
 ENV EVENTURL=
 ENV EVENTPOLICYNAME=
@@ -28,5 +38,6 @@ ENV TEAMNAME=
 ENV MONGOHOST=
 # RabbitMQ
 ENV RABBITMQHOST=
+EXPOSE 8080
 
-CMD ["./captureorderack"]
+CMD ["./captureorder"]
