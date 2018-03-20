@@ -246,15 +246,46 @@ func initMongo() {
 
 	// Create a mongoDBSession which maintains a pool of socket connections
 	// to our MongoDB.
+	success := false
+	startTime := time.Now()
+
 	mongoDBSession, mongoDBSessionError = mgo.DialWithInfo(dialInfo)
 	if mongoDBSessionError != nil {
 		log.Fatal(fmt.Sprintf("Can't connect to mongo at [%s], go error: ", mongoURL), mongoDBSessionError)
-		// If the team provided an Application Insights key, let's track that exception
-		if customTelemetryClient != nil {
+	} else {
+		success = true
+	}
+
+	endTime := time.Now()
+	
+	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
+	if customTelemetryClient != nil {
+		if isCosmosDb {
+			dependency := appinsights.NewRemoteDependencyTelemetry(
+				"CosmosDB",
+				"MongoDB",
+				mongoURL,
+				success)		
+				dependency.Data = "Create session"			
+			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.TrackException(mongoDBSessionError)
+			customTelemetryClient.Track(dependency)
+		} else {
+			dependency := appinsights.NewRemoteDependencyTelemetry(
+				"MongoDB",
+				"MongoDB",
+				mongoURL,
+				success)		
+				dependency.Data = "Create session"			
+			dependency.MarkTime(startTime, endTime)
+			customTelemetryClient.TrackException(mongoDBSessionError)
+			customTelemetryClient.Track(dependency)
 		}
+	}
+	if !success {
 		os.Exit(1)
 	}
+	
 	mongoDBSessionCopy = mongoDBSession.Copy()
 		
 
