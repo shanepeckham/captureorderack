@@ -23,6 +23,8 @@ RUN go build -o ./build/captureorder .
 
 # final stage
 FROM alpine:3.7
+RUN apk update && apk add ca-certificates && rm -rf /var/cache/apk/*
+RUN update-ca-certificates
 WORKDIR /app
 COPY --from=build-env /go/src/github.com/shanepeckham/captureorderack/build /app/
 COPY --from=build-env /go/src/github.com/shanepeckham/captureorderack/conf/app.prod.conf /app/conf/app.conf
