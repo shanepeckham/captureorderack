@@ -29,12 +29,12 @@ namespace OrderCaptureAPI.Singetons
 
         private AMQP10ClientSingleton()
         {
-            // Retrieve the AMQPHost from the Environment Variables
+            // Retrieve the AMQPURL from the Environment Variables
             _amqpUrl = System.Environment.GetEnvironmentVariable("AMQPURL");
 
             // Validate and throw an exception if invalid
             if (!System.Uri.IsWellFormedUriString(_amqpUrl, UriKind.Absolute))
-                throw new ArgumentException("Unable to parse AMQPHOST as a Uri.");
+                throw new ArgumentException("Unable to parse AMQPURL as a Uri.");
 
             var uri = new Uri(_amqpUrl);
             var _eventHubEntity = uri.PathAndQuery;
