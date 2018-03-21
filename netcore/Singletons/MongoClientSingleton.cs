@@ -35,11 +35,14 @@ namespace OrderCaptureAPI.Singetons
 
             // Create a sharded collection
             try {
+                Console.WriteLine("Trying to create a sharded collection.");
                 var shardedCollectionCommand = new JsonCommand<BsonDocument>(@"{ shardCollection: ""k8orders.orders"", key: { product: ""hashed"" } }");
-                db.RunCommand(shardedCollectionCommand);
+                var result = db.RunCommand(shardedCollectionCommand);
+                Console.WriteLine(result.ToString());
             }
-            catch(MongoCommandException) {
-                // The collection is most likely already sharded. I couldn't find a more elegant way to check this.
+            catch(MongoCommandException ex) {
+                // The collection is most likely already sharded. I couldn't find a more elegant way to check this.                
+		        Console.WriteLine("Could not create/re-create sharded MongoDB collection. Either collection is already sharded or sharding is not supported. You can ignore this error. ", ex.Message);
             }
         }
 

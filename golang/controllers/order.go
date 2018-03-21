@@ -31,7 +31,7 @@ func (this *OrderController) Post() {
 	models.AddOrderToAMQP(addedOrder)
 
 	// return
-	this.Data["json"] = map[string]string{"orderId": addedOrder.ID}
+	this.Data["json"] = map[string]string{"orderId": addedOrder.OrderID}
 	this.ServeJSON()
 }
 

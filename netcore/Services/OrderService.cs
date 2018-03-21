@@ -82,6 +82,7 @@ namespace OrderCaptureAPI.Services
             try
             {
                 // Get the MongoDB collection
+                Console.WriteLine("Getting orders collection");
                 ordersCollection = MongoClientSingleton.Instance.GetDatabase("k8orders").GetCollection<Order>("orders");
                 order.Status = "Open";
 
@@ -94,16 +95,21 @@ namespace OrderCaptureAPI.Services
                 int partition = rnd.Next(11);
                 order.Product = $"product-{partition}";
 
-                await ordersCollection.InsertOneAsync(order);
+                // Create an order id
+                var newOrderId = ObjectId.GenerateNewId();
+	            order.OrderId = newOrderId.ToString();
 
                 var db = _isCosmosDb ? "CosmosDB" : "MongoDB";
+                Console.WriteLine($"Inserting order into {db} @ {MongoClientSingleton.Instance.Settings.Server.Host}");
+                await ordersCollection.InsertOneAsync(order);
+
                 await Task.Run(() =>
                 {
                     _telemetryClient.TrackEvent($"CapureOrder: - Team Name {_teamName} -  db {db}");
                 });
-                _logger.LogTrace($"CapureOrder {order.Id}: - Team Name {_teamName} -  db {db}");
+                _logger.LogTrace($"CapureOrder {order.OrderId}: - Team Name {_teamName} -  db {db}");
                 success = true;
-                return order.Id;
+                return order.OrderId;
             }
             catch (Exception ex)
             {
@@ -159,7 +165,7 @@ namespace OrderCaptureAPI.Services
             try
             {
                 // Send to AMQP
-                var amqpMessage = new Message($"{{'order': '{order.Id}', 'source': '{_teamName}'}}");
+                var amqpMessage = new Message($"{{\"order\": \"{order.OrderId}\", \"source\": \"{_teamName}\"}}");
                 await AMQP10ClientSingleton.Instance.SendAsync(amqpMessage);
                 _logger.LogTrace($"Sent message to AMQP 1.0 (EventHub) {AMQP10ClientSingleton.AMQPUrl} {amqpMessage.ToJson()}");
                 success = true;
@@ -208,7 +214,7 @@ namespace OrderCaptureAPI.Services
                             autoDelete: false,
                             arguments: null);
 
-                        var amqpMessage = $"{{'order': '{order.Id}', 'source': '{_teamName}'}}";
+                        var amqpMessage = $"{{\"order\": \"{order.OrderId}\", \"source\": \"{_teamName}\"}}";
                         var body = Encoding.UTF8.GetBytes(amqpMessage);
 
                         channel.BasicPublish(
