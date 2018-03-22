@@ -39,6 +39,7 @@ namespace OrderCaptureAPI.Services
             {
                 _customTelemetryClient = new TelemetryClient();
                 _customTelemetryClient.InstrumentationKey = customInsightsKey;
+                _customTelemetryClient.Context.Cloud.RoleName = "captureorder_netcore";
             }
 
             // Initialize the class using environment variables
