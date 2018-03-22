@@ -11,7 +11,7 @@ using Microsoft.ApplicationInsights;
 
 namespace OrderCaptureAPI.Controllers
 {
-    [ApiVersion( "1.0" )]
+    [ApiVersion("1.0")]
     [Route("v{version:apiVersion}/[controller]")]
     public class OrderController : Controller
     {
@@ -22,35 +22,49 @@ namespace OrderCaptureAPI.Controllers
         public OrderController(ILoggerFactory loggerFactory, TelemetryClient telemetryClient)
         {
             // Set the dependency injected parameters          
-            _logger = loggerFactory.CreateLogger("OrderController"); 
+            _logger = loggerFactory.CreateLogger("OrderController");
             _telemetryClient = telemetryClient;
 
             // Initialize the Order Service
-            _orderService = new OrderService(loggerFactory,telemetryClient);
+            _orderService = new OrderService(loggerFactory, telemetryClient);
         }
 
         // POST /order
         [HttpPost]
         public async Task<JsonResult> Post(Order order)
         {
-             _logger.LogInformation("OrderController POST");
-            
+            _logger.LogInformation("OrderController POST");
+
             try
             {
                 // Add the order to MongoDB
                 var orderId = await _orderService.AddOrderToMongoDB(order);
-                
+
                 // Add the order to AMQP
                 await _orderService.AddOrderToAMQP(order);
-                
+
                 // Return OrderId
                 return Json(new { OrderId = orderId });
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex,ex.Message,order);
-                return new JsonErrorResult(new { Error = ex.Message});
+                _logger.LogCritical(ex, ex.Message, order);
+                return new JsonErrorResult(new { Error = ex.Message });
             }
+        }
+
+        // GET /order
+        public async Task<JsonResult> Get()
+        {
+            _logger.LogInformation("OrderController GET Health Check");
+            return await Task.Run(() =>
+            {
+                var healthCheck = _orderService.HealthCheck();
+                if (healthCheck.IsDatabaseHealthy && healthCheck.IsMessageQueueHealthy)
+                    return Json(healthCheck);
+                else
+                    return new JsonErrorResult(healthCheck);
+            });
         }
     }
 }

@@ -58,6 +58,14 @@ namespace OrderCaptureAPI.Singetons
             }
         }
 
+        public static Amqp.Framing.Error LastSenderLinkError
+        {
+            get
+            {
+                return _senderLinkInstance.Error;
+            }
+        }
+
         public void Dispose()
         {
             _senderLinkInstance.Close();

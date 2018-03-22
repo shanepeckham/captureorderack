@@ -28,7 +28,42 @@ namespace OrderCaptureAPI.Singetons
                 throw new ArgumentException("Unable to parse MONGOURL as a Uri.");
 
             // Initialize the MongoClient singleton
-            _mongoClientInstance =  new MongoClient(mongoURL);
+            //_mongoClientInstance =  new MongoClient(mongoURL);
+
+
+            // Parse to get components
+            var parsedMongoURL = new Uri(mongoURL);
+            Console.WriteLine($"MONGO HOST: {parsedMongoURL.Host}");
+
+            // Create settings object to connect, passing 5 seconds for server connection timeout
+            var settings = new MongoClientSettings {
+                Server = new MongoServerAddress(parsedMongoURL.Host, parsedMongoURL.Port),
+                ClusterConfigurator = builder =>
+                {
+                    builder.ConfigureCluster(s => s.With(serverSelectionTimeout: TimeSpan.FromSeconds(5)));
+                }
+            };
+
+            // Use SSL if required
+            if(parsedMongoURL.PathAndQuery.Contains("ssl=true")) {
+                settings.UseSsl = true;
+                settings.SslSettings = new SslSettings {
+                    EnabledSslProtocols = SslProtocols.Tls12
+                };
+            }
+
+            // Pass credentials if specified    
+            if(!string.IsNullOrWhiteSpace(parsedMongoURL.UserInfo)) {
+                var userPass = parsedMongoURL.UserInfo.Split(":");
+                Console.WriteLine($"MONGO USER: {userPass[0]}");
+                Console.WriteLine($"MONGO PASS: {userPass[1]}");
+                var identity = new MongoInternalIdentity("k8orders", userPass[0]);
+                var evidence = new PasswordEvidence(userPass[1]);
+                settings.Credential =  new MongoCredential("SCRAM-SHA-1", identity, evidence);
+            }
+
+            // Initialize with settings
+            _mongoClientInstance = new MongoClient(settings);
 
             // Create the database 
             var db = MongoClientSingleton.Instance.GetDatabase("k8orders");
@@ -43,6 +78,9 @@ namespace OrderCaptureAPI.Singetons
             catch(MongoCommandException ex) {
                 // The collection is most likely already sharded. I couldn't find a more elegant way to check this.                
 		        Console.WriteLine("Could not create/re-create sharded MongoDB collection. Either collection is already sharded or sharding is not supported. You can ignore this error. ", ex.Message);
+            }
+            catch(Exception ex) {
+		        Console.WriteLine("Could not connect to MongoDB: ", ex.Message);                
             }
         }
 

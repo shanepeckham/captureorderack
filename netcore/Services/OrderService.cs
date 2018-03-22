@@ -66,6 +66,55 @@ namespace OrderCaptureAPI.Services
 
         #region Methods
 
+        public HealthCheck HealthCheck() {
+            var healthCheck = new HealthCheck();
+            
+            // EventHub/RabbitMQ health check
+            _logger.LogInformation($"Message Queue health check");
+            if (_isEventHub) {
+                healthCheck.MessageQueue = "EventHub";
+                //healthCheck.IsMessageQueueHealthy = !AMQP10ClientSingleton.Instance.IsClosed; 
+                try {
+                    AMQP10ClientSingleton.Instance.Send(new Message("{}"), TimeSpan.FromSeconds(5));
+                    healthCheck.IsMessageQueueHealthy = true;
+                }
+                catch (Exception ex ){
+                    healthCheck.IsMessageQueueHealthy = false;
+                    healthCheck.MessageQueueError = ex.Message;        
+                }
+            }
+            else
+            {
+                healthCheck.MessageQueue = "RabbitMQ";
+                try {
+                    var connection = AMQP091ClientSingleton.AMQPConnectionFactory.CreateConnection();
+                    healthCheck.IsMessageQueueHealthy = true;
+                } catch (Exception ex) {
+                    healthCheck.IsMessageQueueHealthy = false;
+                    healthCheck.MessageQueueError = ex.Message;        
+                }
+            }
+            _logger.LogInformation($"Message Queue health check: {healthCheck.IsMessageQueueHealthy}");            
+
+            // CosmosDB/MongoDB health check
+            _logger.LogInformation($"Database health check");            
+            if(_isCosmosDb)
+                healthCheck.Database = "CosmosDB";
+            else
+                healthCheck.Database = "MongoDB";
+                
+            try {
+                var collections = MongoClientSingleton.Instance.GetDatabase("k8orders").ListCollections();
+                healthCheck.IsDatabaseHealthy = true;            
+            } catch (Exception ex) {
+                healthCheck.IsDatabaseHealthy = false;     
+                healthCheck.DatabaseError = ex.Message;         
+            }
+            _logger.LogInformation($"Database health check: {healthCheck.IsDatabaseHealthy}");            
+
+            return healthCheck;
+        }
+
         // Logs out value of a variable
         public void ValidateVariable(string value, string envName)
         {
@@ -114,7 +163,7 @@ namespace OrderCaptureAPI.Services
             }
             catch (Exception ex)
             {
-                _logger.LogCritical(ex, ex.Message, order);
+                _logger.LogCritical(ex, ex.Message);
                 if(_customTelemetryClient!=null)
                     _customTelemetryClient.TrackException(ex);
                 throw;

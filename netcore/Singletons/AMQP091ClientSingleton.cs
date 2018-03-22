@@ -45,7 +45,7 @@ namespace OrderCaptureAPI.Singetons
             var uri = new Uri(_amqpUrl);
             var user = "";
             var pass = "";
-            if(uri.UserInfo != null) {
+            if(uri.UserInfo != null && !string.IsNullOrWhiteSpace(uri.UserInfo)) {
                 var userpass = uri.UserInfo.Split(':');
                 if(userpass.Length==2) {
                     user = userpass[0];
@@ -56,6 +56,7 @@ namespace OrderCaptureAPI.Singetons
             _factory.UserName = user;
             _factory.Password = pass;
             _factory.HostName = uri.Host;
+            _factory.RequestedConnectionTimeout = 3000;
         }
         public void Dispose()
         {
