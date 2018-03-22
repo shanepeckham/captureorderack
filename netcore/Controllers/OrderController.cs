@@ -52,19 +52,5 @@ namespace OrderCaptureAPI.Controllers
                 return new JsonErrorResult(new { Error = ex.Message });
             }
         }
-
-        // GET /order
-        public async Task<JsonResult> Get()
-        {
-            _logger.LogInformation("OrderController GET Health Check");
-            return await Task.Run(() =>
-            {
-                var healthCheck = _orderService.HealthCheck();
-                if (healthCheck.IsDatabaseHealthy && healthCheck.IsMessageQueueHealthy)
-                    return Json(healthCheck);
-                else
-                    return new JsonErrorResult(healthCheck);
-            });
-        }
     }
 }

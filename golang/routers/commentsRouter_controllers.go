@@ -14,5 +14,4 @@ func init() {
 			AllowHTTPMethods: []string{"post"},
 			MethodParams:     param.Make(),
 			Params:           nil})
-
 }

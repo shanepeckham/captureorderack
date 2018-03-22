@@ -10,7 +10,7 @@ Access the Swagger UI at [http://[host]/swagger]()
 ### Submitting an order
 
 ```
-POST /v1/Order HTTP/1.1
+POST /v1/order HTTP/1.1
 Host: [host]:[port]
 Content-Type: application/json
 

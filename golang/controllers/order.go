@@ -34,4 +34,3 @@ func (this *OrderController) Post() {
 	this.Data["json"] = map[string]string{"orderId": addedOrder.OrderID}
 	this.ServeJSON()
 }
-

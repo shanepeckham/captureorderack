@@ -19,6 +19,7 @@ import (
 	"gopkg.in/mgo.v2/bson"
 	amqp10 "pack.ag/amqp"
 	amqp091 "github.com/streadway/amqp"
+	"gopkg.in/matryer/try.v1"
 )
 
 // Order represents the order json
@@ -51,12 +52,12 @@ var mongoCollectionName = "orders"
 var mongoCollectionShardKey = "product"
 
 // AMQP 0.9.1 variables
-var amqp091Client amqp091.Connection
-var amqp091Channel amqp091.Channel
+var amqp091Client *amqp091.Connection
+var amqp091Channel *amqp091.Channel
 var amqp091Queue amqp091.Queue
 
 // AMQP 1.0 variables
-var amqp10Client amqp10.Client
+var amqp10Client *amqp10.Client
 var amqp10Session *amqp10.Session
 var eventHubName string
 
@@ -112,11 +113,17 @@ func AddOrderToMongoDB(order Order) Order {
 		success = true
 	}
 
-	// Track the event for the challenge purposes
-	challengeTelemetryClient.TrackEvent("CapureOrder: - Team Name " + teamName + " db " + db)
-
 	endTime := time.Now()
 
+	if success {
+		// Track the event for the challenge purposes
+		eventTelemetry := appinsights.NewEventTelemetry("CapureOrder: - Team Name " + teamName + " db " + db)
+		eventTelemetry.Properties["team"] = teamName
+		eventTelemetry.Properties["challenge"] = "captureorder"
+		eventTelemetry.Properties["type"] = db
+		challengeTelemetryClient.Track(eventTelemetry)
+	}
+	
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
 	if customTelemetryClient != nil {
 		if isCosmosDb {
@@ -155,6 +162,8 @@ func AddOrderToAMQP(order Order) {
 //// BEGIN: NON EXPORTED FUNCTIONS
 func init() {
 
+	rand.Seed(time.Now().UnixNano())
+
 	// Validate environment variables
 	validateVariable(customInsightsKey, "APPINSIGHTS_KEY")
 	validateVariable(challengeInsightsKey, "CHALLENGEAPPINSIGHTS_KEY")
@@ -164,6 +173,8 @@ func init() {
 
 	// Initialize the Application Insights telemtry client(s)
 	challengeTelemetryClient = appinsights.NewTelemetryClient(challengeInsightsKey)
+	challengeTelemetryClient.Context().Tags.Cloud().SetRole("captureorder_golang")
+
 	if customInsightsKey != "" {
 		customTelemetryClient = appinsights.NewTelemetryClient(customInsightsKey)
 
@@ -188,8 +199,7 @@ func validateVariable(value string, envName string) {
 	}
 }
 
-// Initialize the MongoDB client
-func initMongo() {
+func initMongoDial() (success bool, mErr error) {
 	url, err := url.Parse(mongoURL)
 	if err != nil {
 		// If the team provided an Application Insights key, let's track that exception
@@ -249,12 +259,13 @@ func initMongo() {
 
 	// Create a mongoDBSession which maintains a pool of socket connections
 	// to our MongoDB.
-	success := false
+	success = false
 	startTime := time.Now()
 
 	mongoDBSession, mongoDBSessionError = mgo.DialWithInfo(dialInfo)
 	if mongoDBSessionError != nil {
 		log.Println(fmt.Sprintf("Can't connect to mongo at [%s], go error: ", mongoURL), mongoDBSessionError)
+		mErr = mongoDBSessionError
 	} else {
 		success = true
 	}
@@ -285,10 +296,17 @@ func initMongo() {
 			customTelemetryClient.Track(dependency)
 		}
 	}
+	return
+}
+
+// Initialize the MongoDB client
+func initMongo() {
+	
+	success,err := initMongoDial()
 	if !success {
 		os.Exit(1)
 	}
-	
+
 	mongoDBSessionCopy = mongoDBSession.Copy()
 		
 
@@ -344,114 +362,171 @@ func initAMQP() {
 
 		// Parse the eventHubName (last part of the url)
 		eventHubName = url.Path
+		initAMQP10()
 	} else {
 		log.Println("Using RabbitMQ")
 		queueType = "RabbitMQ"
+		initAMQP091()
 	}
 	log.Println("\tAMQP URL: " + amqpURL)
 }
 
+func initAMQP091() {
+
+	// Try to establish the connection to AMQP
+	// with retry logic
+	err := try.Do(func(attempt int) (bool, error) {
+		var err error
+		
+		amqp091Client, err = amqp091.Dial(amqpURL)
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+		}
+
+		if err != nil {
+			log.Println("Error connecting to Rabbit instance. Will retry in 5 seconds:", err)
+		  	time.Sleep(5 * time.Second) // wait
+		}
+		return attempt < 3, err
+	  })
+
+	// If we still can't connect
+	if err != nil {
+		log.Println("Couldn't connect to Rabbit after 3 retries:", err)
+	} else {
+		log.Println("Connected to RabbitMQ. Establishing Channel and Queue")
+		
+		// Otherwise, let's continue and establish the channel and queue
+		amqp091Channel, err = amqp091Client.Channel()
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+		}
+
+		amqp091Queue, err = amqp091Channel.QueueDeclare(
+			"order", // name
+			true,    // durable
+			false,   // delete when unused
+			false,   // exclusive
+			false,   // no-wait
+			nil,     // arguments
+		)
+	}
+}
+
+func initAMQP10() {
+	// Try to establish the connection to AMQP
+	// with retry logic
+	err := try.Do(func(attempt int) (bool, error) {
+		var err error
+		
+		amqp10Client, err = amqp10.Dial(amqpURL)
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+		}
+
+		if err != nil {
+			log.Println("Error connecting to EventHub instance. Will retry in 5 seconds:", err)
+		  	time.Sleep(5 * time.Second) // wait
+		}
+		return attempt < 3, err
+	  })
+	
+	  // If we still can't connect
+	if err != nil {
+		log.Println("Couldn't connect to EventHub after 3 retries:", err)
+	}
+}
+
 // addOrderToAMQP091 Adds the order to AMQP 0.9.1
 func addOrderToAMQP091(order Order) {
-	success := false
-	startTime := time.Now()
-	body := fmt.Sprintf("{\"order\": \"%s\", \"source\": \"%s\"}", order.OrderID, teamName)
-
-	amqp091Client, err := amqp091.Dial(amqpURL)
-	if err != nil {
-		// If the team provided an Application Insights key, let's track that exception
-		if customTelemetryClient != nil {
-			customTelemetryClient.TrackException(err)
-		}
-		log.Fatal("Creating client: ", err)
-	}
-
-	amqp091Channel, err := amqp091Client.Channel()
-	if err != nil {
-		// If the team provided an Application Insights key, let's track that exception
-		if customTelemetryClient != nil {
-			customTelemetryClient.TrackException(err)
-		}
-		log.Fatal("Creating channel: ", err)
-	}
-
-	amqp091Queue, err := amqp091Channel.QueueDeclare(
-		"order", // name
-		true,    // durable
-		false,   // delete when unused
-		false,   // exclusive
-		false,   // no-wait
-		nil,     // arguments
-	)
-
-	// Send message
-	err = amqp091Channel.Publish(
-		"",     // exchange
-		amqp091Queue.Name, // routing key
-		false,  // mandatory
-		false,  // immediate
-		amqp091.Publishing{
-			DeliveryMode: amqp091.Persistent,
-			ContentType:  "application/json",
-			Body:         []byte(body),
-		})
-	if err != nil {
-		// If the team provided an Application Insights key, let's track that exception
-		if customTelemetryClient != nil {
-			customTelemetryClient.TrackException(err)
-		}
-		log.Println("Sending message:", err)
+	if amqp091Channel == nil {
+		log.Println("Skipping AMQP. It is either not configured or improperly configured")
 	} else {
-		success = true
+		success := false
+		startTime := time.Now()
+		body := fmt.Sprintf("{\"order\": \"%s\", \"source\": \"%s\"}", order.OrderID, teamName)
+
+		// Send message
+		err := amqp091Channel.Publish(
+			"",     // exchange
+			amqp091Queue.Name, // routing key
+			false,  // mandatory
+			false,  // immediate
+			amqp091.Publishing{
+				DeliveryMode: amqp091.Persistent,
+				ContentType:  "application/json",
+				Body:         []byte(body),
+			})
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+			log.Println("Sending message:", err)
+		} else {
+			success = true
+		}
+
+		endTime := time.Now()
+
+		if success {
+			// Track the event for the challenge purposes
+			eventTelemetry := appinsights.NewEventTelemetry("SendOrder: - Team Name " + teamName + " - RabbitMQ")
+			eventTelemetry.Properties["team"] = teamName
+			eventTelemetry.Properties["challenge"] = "sendorder"
+			eventTelemetry.Properties["type"] = "rabbitmq"
+			challengeTelemetryClient.Track(eventTelemetry)
+		}
+
+		// Track the dependency, if the team provided an Application Insights key, let's track that dependency
+		if customTelemetryClient != nil {
+			dependency := appinsights.NewRemoteDependencyTelemetry(
+				"RabbitMQ",
+				"AMQP",
+				amqpURL,
+				success)		
+				dependency.Data = "Send message"			
+			dependency.MarkTime(startTime, endTime)
+			customTelemetryClient.Track(dependency)
+		}
+
+		log.Printf("Sent to AMQP 0.9.1 (RabbitMQ) - %t, %s: %s", success, amqpURL, body)
 	}
-
-	endTime := time.Now()
-
-	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
-	if customTelemetryClient != nil {
-		dependency := appinsights.NewRemoteDependencyTelemetry(
-			"RabbitMQ",
-			"AMQP",
-			amqpURL,
-			success)		
-			dependency.Data = "Send message"			
-		dependency.MarkTime(startTime, endTime)
-		customTelemetryClient.Track(dependency)
-	}
-
-	log.Printf("Sent to AMQP 0.9.1 (RabbitMQ) - %t, %s: %s", success, amqpURL, body)
 }
 
 // addOrderToAMQP10 Adds the order to AMQP 1.0 (sends to the Default ConsumerGroup)
 func addOrderToAMQP10(order Order) {
-	success := false
-	startTime := time.Now()
-	body := fmt.Sprintf("{\"order\": \"%s\", \"source\": \"%s\"}", order.OrderID, teamName)
+	if amqp10Client == nil {
+		log.Println("Skipping AMQP. It is either not configured or improperly configured")
+	} else {
+		// Only run this part if AMQP is configured
+		success := false
+		var err error
+		startTime := time.Now()
+		body := fmt.Sprintf("{\"order\": \"%s\", \"source\": \"%s\"}", order.OrderID, teamName)
 
-	amqp10Client, err := amqp10.Dial(amqpURL)
-	if err != nil {
-		// If the team provided an Application Insights key, let's track that exception
-		if customTelemetryClient != nil {
-			customTelemetryClient.TrackException(err)
+		// Open a session
+		amqp10Session, err = amqp10Client.NewSession()	
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+			log.Fatal("Creating session: ", err)
 		}
-		log.Fatal("Creating client: ", err)
-	}
-	defer amqp10Client.Close()
 
-	// Send to AMQP
-	amqp10Session, err := amqp10Client.NewSession()	
-	if err != nil {
-		// If the team provided an Application Insights key, let's track that exception
-		if customTelemetryClient != nil {
-			customTelemetryClient.TrackException(err)
-		}
-		log.Fatal("Creating session: ", err)
-	}
+		// Get an empty context
+		amqp10Context := context.Background()
 
-
-	// Get a context
-	amqp10Context := context.Background()
-	{
 		// Include a random partition
 		rand.Seed(time.Now().UnixNano())
 		partitionKey := strconv.Itoa(random(0, 3))
@@ -459,6 +534,7 @@ func addOrderToAMQP10(order Order) {
 
 		log.Printf("AMQP URL: %s, Target: %s", amqpURL, targetAddress)
 
+		// Create a sender
 		sender, err := amqp10Session.NewSender(
 			amqp10.LinkTargetAddress(targetAddress),
 		)
@@ -470,6 +546,7 @@ func addOrderToAMQP10(order Order) {
 			log.Fatal("Creating sender link: ", err)
 		}
 
+		// Prepare the context to timeout in 5 seconds
 		amqp10Context, cancel := context.WithTimeout(amqp10Context, 5*time.Second)
 
 		// Send message
@@ -484,26 +561,35 @@ func addOrderToAMQP10(order Order) {
 			success = true
 		}
 
-
+		// Cancel the context and close the sender
 		cancel()
 		sender.Close()
+		
+		endTime := time.Now()
+
+		if success {
+			// Track the event for the challenge purposes
+			eventTelemetry := appinsights.NewEventTelemetry("SendOrder: - Team Name " + teamName + " - EventHub")
+			eventTelemetry.Properties["team"] = teamName
+			eventTelemetry.Properties["challenge"] = "sendorder"
+			eventTelemetry.Properties["type"] = "eventhub"
+			challengeTelemetryClient.Track(eventTelemetry)
+		}
+
+		// Track the dependency, if the team provided an Application Insights key, let's track that dependency
+		if customTelemetryClient != nil {
+			dependency := appinsights.NewRemoteDependencyTelemetry(
+				"EventHub",
+				"AMQP",
+				amqpURL,
+				success)
+			dependency.Data = "Send message"		
+			dependency.MarkTime(startTime, endTime)
+			customTelemetryClient.Track(dependency)
+		}
+
+		log.Printf("Sent to AMQP 1.0 (EventHub) - %t, %s: %s", success, amqpURL, body)
 	}
-
-	endTime := time.Now()
-
-	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
-	if customTelemetryClient != nil {
-		dependency := appinsights.NewRemoteDependencyTelemetry(
-			"EventHub",
-			"AMQP",
-			amqpURL,
-			success)
-		dependency.Data = "Send message"		
-		dependency.MarkTime(startTime, endTime)
-		customTelemetryClient.Track(dependency)
-	}
-
-	log.Printf("Sent to AMQP 1.0 (EventHub) - %t, %s: %s", success, amqpURL, body)
 }
 
 // random: Generates a random number

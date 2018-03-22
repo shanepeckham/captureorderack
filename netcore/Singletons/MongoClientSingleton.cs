@@ -40,7 +40,7 @@ namespace OrderCaptureAPI.Singetons
                 Server = new MongoServerAddress(parsedMongoURL.Host, parsedMongoURL.Port),
                 ClusterConfigurator = builder =>
                 {
-                    builder.ConfigureCluster(s => s.With(serverSelectionTimeout: TimeSpan.FromSeconds(5)));
+                    builder.ConfigureCluster(s => s.With(serverSelectionTimeout: TimeSpan.FromSeconds(10)));
                 }
             };
 

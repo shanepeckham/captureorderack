@@ -12,6 +12,7 @@ namespace OrderCaptureAPI.Services
     using MongoDB.Bson;
     using System.Text;
     using Microsoft.ApplicationInsights.DataContracts;
+    using System.Collections.Generic;
 
     public class OrderService
     {
@@ -32,6 +33,7 @@ namespace OrderCaptureAPI.Services
             // Initialize the class logger and telemetry client
             _logger = loggerFactory.CreateLogger("OrderService");
             _telemetryClient = telemetryClient;
+            _telemetryClient.Context.Cloud.RoleName = "captureorder_netcore";
 
             // Initialize custom telemetry client, if the key is provided
             var customInsightsKey = System.Environment.GetEnvironmentVariable("APPINSIGHTS_KEY");
@@ -65,55 +67,6 @@ namespace OrderCaptureAPI.Services
         #endregion
 
         #region Methods
-
-        public HealthCheck HealthCheck() {
-            var healthCheck = new HealthCheck();
-            
-            // EventHub/RabbitMQ health check
-            _logger.LogInformation($"Message Queue health check");
-            if (_isEventHub) {
-                healthCheck.MessageQueue = "EventHub";
-                //healthCheck.IsMessageQueueHealthy = !AMQP10ClientSingleton.Instance.IsClosed; 
-                try {
-                    AMQP10ClientSingleton.Instance.Send(new Message("{}"), TimeSpan.FromSeconds(5));
-                    healthCheck.IsMessageQueueHealthy = true;
-                }
-                catch (Exception ex ){
-                    healthCheck.IsMessageQueueHealthy = false;
-                    healthCheck.MessageQueueError = ex.Message;        
-                }
-            }
-            else
-            {
-                healthCheck.MessageQueue = "RabbitMQ";
-                try {
-                    var connection = AMQP091ClientSingleton.AMQPConnectionFactory.CreateConnection();
-                    healthCheck.IsMessageQueueHealthy = true;
-                } catch (Exception ex) {
-                    healthCheck.IsMessageQueueHealthy = false;
-                    healthCheck.MessageQueueError = ex.Message;        
-                }
-            }
-            _logger.LogInformation($"Message Queue health check: {healthCheck.IsMessageQueueHealthy}");            
-
-            // CosmosDB/MongoDB health check
-            _logger.LogInformation($"Database health check");            
-            if(_isCosmosDb)
-                healthCheck.Database = "CosmosDB";
-            else
-                healthCheck.Database = "MongoDB";
-                
-            try {
-                var collections = MongoClientSingleton.Instance.GetDatabase("k8orders").ListCollections();
-                healthCheck.IsDatabaseHealthy = true;            
-            } catch (Exception ex) {
-                healthCheck.IsDatabaseHealthy = false;     
-                healthCheck.DatabaseError = ex.Message;         
-            }
-            _logger.LogInformation($"Database health check: {healthCheck.IsDatabaseHealthy}");            
-
-            return healthCheck;
-        }
 
         // Logs out value of a variable
         public void ValidateVariable(string value, string envName)
@@ -155,7 +108,11 @@ namespace OrderCaptureAPI.Services
 
                 await Task.Run(() =>
                 {
-                    _telemetryClient.TrackEvent($"CapureOrder: - Team Name {_teamName} -  db {db}");
+                    _telemetryClient.TrackEvent($"CapureOrder: - Team Name {_teamName} - db {db}",new Dictionary<string,string> {
+                        {"team", _teamName},
+                        {"challenge", "captureorder"},
+                        {"type", db}
+                     });
                 });
                 _logger.LogTrace($"CapureOrder {order.OrderId}: - Team Name {_teamName} -  db {db}");
                 success = true;
@@ -199,11 +156,17 @@ namespace OrderCaptureAPI.Services
 
         public async Task AddOrderToAMQP(Order order)
         {
-            if (_isEventHub)
-                await AddOrderToAMQP10(order);
-            else
-            {
-                await AddOrderToAMQP091(order);
+            // Only execute if AMQP is defined
+            if(!string.IsNullOrWhiteSpace(System.Environment.GetEnvironmentVariable("AMQPURL"))) {
+                if (_isEventHub)
+                    await AddOrderToAMQP10(order);
+                else
+                {
+                    await AddOrderToAMQP091(order);
+                }
+            }
+            else {
+                _logger.LogTrace($"Skipping AMQP. It is either not configured or improperly configured");                
             }
         }
 
@@ -219,6 +182,15 @@ namespace OrderCaptureAPI.Services
                 await AMQP10ClientSingleton.Instance.SendAsync(amqpMessage);
                 _logger.LogTrace($"Sent message to AMQP 1.0 (EventHub) {AMQP10ClientSingleton.AMQPUrl} {amqpMessage.ToJson()}");
                 success = true;
+
+                await Task.Run(() =>
+                {
+                    _telemetryClient.TrackEvent($"SendOrder: - Team Name {_teamName} - EventHub",new Dictionary<string,string> {
+                        {"team", _teamName},
+                        {"challenge", "sendorder"},
+                        {"type", "eventhub"}
+                     });
+                });
             }
             catch (Exception ex)
             {
@@ -279,6 +251,15 @@ namespace OrderCaptureAPI.Services
                 });
 
                 success = true;
+
+                await Task.Run(() =>
+                {
+                    _telemetryClient.TrackEvent($"SendOrder: - Team Name {_teamName} - RabbitMQ",new Dictionary<string,string> {
+                        {"team", _teamName},
+                        {"challenge", "sendorder"},
+                        {"type", "rabbitmq"}
+                     });
+                });
             }
             catch (Exception ex)
             {

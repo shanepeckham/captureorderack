@@ -12,6 +12,7 @@ RUN go get -u -v gopkg.in/mgo.v2
 RUN go get -u -v github.com/Azure/go-autorest/autorest/utils
 RUN go get -u -v github.com/streadway/amqp
 RUN go get -u -v pack.ag/amqp
+RUN go get gopkg.in/matryer/try.v1
 
 # Copy the application files
 COPY . .
