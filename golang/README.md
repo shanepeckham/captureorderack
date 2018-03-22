@@ -54,3 +54,5 @@ ENV AMQPURL=amqp://[url]:5672
 ```
 ENV AMQPURL=amqps://[policy name]:[policy key]@[youreventhub].servicebus.windows.net/[eventhubname]
 ```
+
+Make sure your _policy key_ is URL Encoded. Use a tool like: <https://www.url-encode-decode.com/>

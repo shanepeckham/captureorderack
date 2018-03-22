@@ -34,7 +34,7 @@ namespace OrderCaptureAPI.Singetons
 
             // Validate and throw an exception if invalid
             if (!System.Uri.IsWellFormedUriString(_amqpUrl, UriKind.Absolute))
-                throw new ArgumentException("Unable to parse AMQPURL as a Uri.");
+                throw new ArgumentException("Unable to parse AMQPURL as a Uri. Make sure your policy key is URL Encoded.");
 
             var uri = new Uri(_amqpUrl);
             var _eventHubEntity = uri.PathAndQuery;

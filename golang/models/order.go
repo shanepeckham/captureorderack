@@ -102,13 +102,12 @@ func AddOrderToMongoDB(order Order) Order {
 	log.Println("_id:", order)
 
 	if mongoDBSessionError != nil {
-		log.Fatal("Problem inserting data: ", mongoDBSessionError)
-		log.Println("_id:", order)
-
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(mongoDBSessionError)
 		}
+		log.Println("Problem inserting data: ", mongoDBSessionError)
+		log.Println("_id:", order)
 	} else {
 		success = true
 	}
@@ -167,6 +166,10 @@ func init() {
 	challengeTelemetryClient = appinsights.NewTelemetryClient(challengeInsightsKey)
 	if customInsightsKey != "" {
 		customTelemetryClient = appinsights.NewTelemetryClient(customInsightsKey)
+
+		// Set role instance name globally -- this is usually the
+		// name of the service submitting the telemetry
+		customTelemetryClient.Context().Tags.Cloud().SetRole("captureorder_golang")
 	}
 
 	// Initialize the MongoDB client
@@ -189,11 +192,11 @@ func validateVariable(value string, envName string) {
 func initMongo() {
 	url, err := url.Parse(mongoURL)
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Problem parsing Mongo URL %s: ",url), err)
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(err)
 		}
+		log.Fatal(fmt.Sprintf("Problem parsing Mongo URL %s: ",url), err)
 	}
 
 	if isCosmosDb {
@@ -251,7 +254,7 @@ func initMongo() {
 
 	mongoDBSession, mongoDBSessionError = mgo.DialWithInfo(dialInfo)
 	if mongoDBSessionError != nil {
-		log.Fatal(fmt.Sprintf("Can't connect to mongo at [%s], go error: ", mongoURL), mongoDBSessionError)
+		log.Println(fmt.Sprintf("Can't connect to mongo at [%s], go error: ", mongoURL), mongoDBSessionError)
 	} else {
 		success = true
 	}
@@ -327,11 +330,11 @@ func initMongo() {
 func initAMQP() {
 	url, err := url.Parse(amqpURL)
 	if err != nil {
-		log.Fatal(fmt.Sprintf("Problem parsing AMQP Host %s: ",url), err)
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(err)
 		}
+		log.Fatal(fmt.Sprintf("Problem parsing AMQP Host %s. Make sure you URL Encoded your policy/password.",url), err)
 	}
 
 	// Figure out if we're running on EventHub or elsewhere
@@ -356,20 +359,20 @@ func addOrderToAMQP091(order Order) {
 
 	amqp091Client, err := amqp091.Dial(amqpURL)
 	if err != nil {
-		log.Fatal("Creating client: ", err)
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(err)
 		}
+		log.Fatal("Creating client: ", err)
 	}
 
 	amqp091Channel, err := amqp091Client.Channel()
 	if err != nil {
-		log.Fatal("Creating channel: ", err)
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(err)
 		}
+		log.Fatal("Creating channel: ", err)
 	}
 
 	amqp091Queue, err := amqp091Channel.QueueDeclare(
@@ -393,11 +396,11 @@ func addOrderToAMQP091(order Order) {
 			Body:         []byte(body),
 		})
 	if err != nil {
-		log.Fatal("Sending message:", err)
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(err)
 		}
+		log.Println("Sending message:", err)
 	} else {
 		success = true
 	}
@@ -427,22 +430,22 @@ func addOrderToAMQP10(order Order) {
 
 	amqp10Client, err := amqp10.Dial(amqpURL)
 	if err != nil {
-		log.Fatal("Creating client: ", err)
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(err)
 		}
+		log.Fatal("Creating client: ", err)
 	}
 	defer amqp10Client.Close()
 
 	// Send to AMQP
 	amqp10Session, err := amqp10Client.NewSession()	
 	if err != nil {
-		log.Fatal("Creating session: ", err)
 		// If the team provided an Application Insights key, let's track that exception
 		if customTelemetryClient != nil {
 			customTelemetryClient.TrackException(err)
 		}
+		log.Fatal("Creating session: ", err)
 	}
 
 
@@ -460,11 +463,11 @@ func addOrderToAMQP10(order Order) {
 			amqp10.LinkTargetAddress(targetAddress),
 		)
 		if err != nil {
-			log.Fatal("Creating sender link: ", err)
 			// If the team provided an Application Insights key, let's track that exception
 			if customTelemetryClient != nil {
 				customTelemetryClient.TrackException(err)
 			}
+			log.Fatal("Creating sender link: ", err)
 		}
 
 		amqp10Context, cancel := context.WithTimeout(amqp10Context, 5*time.Second)
@@ -472,11 +475,11 @@ func addOrderToAMQP10(order Order) {
 		// Send message
 		err = sender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
 		if err != nil {
-			log.Fatal("Sending message:", err)
 			// If the team provided an Application Insights key, let's track that exception
 			if customTelemetryClient != nil {
 				customTelemetryClient.TrackException(err)
 			}
+			log.Println("Sending message:", err)
 		} else {
 			success = true
 		}
