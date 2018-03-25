@@ -72,7 +72,7 @@ var db string // CosmosDB or MongoDB?
 var queueType string // EventHub or RabbitMQ
 
 // AddOrderToMongoDB Adds the order to MongoDB/CosmosDB
-func AddOrderToMongoDB(order Order) Order {
+func AddOrderToMongoDB(order Order) (Order, error) {
 	success := false
 	startTime := time.Now()
 
@@ -147,7 +147,7 @@ func AddOrderToMongoDB(order Order) Order {
 		}
 	}
 
-	return order
+	return order, mongoDBSessionError
 }
 
 // AddOrderToAMQP Adds the order to AMQP (EventHub/RabbitMQ)
@@ -262,12 +262,14 @@ func initMongoDial() (success bool, mErr error) {
 	success = false
 	startTime := time.Now()
 
+	log.Println("Attempting to connect to MongoDB")
 	mongoDBSession, mongoDBSessionError = mgo.DialWithInfo(dialInfo)
 	if mongoDBSessionError != nil {
 		log.Println(fmt.Sprintf("Can't connect to mongo at [%s], go error: ", mongoURL), mongoDBSessionError)
 		mErr = mongoDBSessionError
 	} else {
 		success = true
+		log.Println("\tConnected")		
 	}
 
 	endTime := time.Now()
@@ -369,10 +371,11 @@ func initAMQP() {
 		initAMQP091()
 	}
 	log.Println("\tAMQP URL: " + amqpURL)
+	log.Println("** READY TO TAKE ORDERS **")
 }
 
 func initAMQP091() {
-	log.Println("InitAMQP091")				
+	log.Println("Attempting to connect to RabbitMQ")				
 	// Try to establish the connection to AMQP
 	// with retry logic
 	err := try.Do(func(attempt int) (bool, error) {
@@ -397,7 +400,7 @@ func initAMQP091() {
 	if err != nil {
 		log.Println("Couldn't connect to Rabbit after 3 retries:", err)
 	} else {
-		log.Println("Connected to RabbitMQ. Establishing Channel and Queue")
+		log.Println("\tConnected to RabbitMQ. Establishing Channel and Queue")
 		
 		// Otherwise, let's continue and establish the channel and queue
 		amqp091Channel, err = amqp091Client.Channel()
@@ -419,13 +422,14 @@ func initAMQP091() {
 	}
 }
 
-func initAMQP10() {
-	log.Println("InitAMQP10")			
+func initAMQP10() {			
+				
 	// Try to establish the connection to AMQP
 	// with retry logic
 	err := try.Do(func(attempt int) (bool, error) {
 		var err error
 		
+		log.Println("Attempting to connect to EventHub")	
 		amqp10Client, err = amqp10.Dial(amqpURL)
 		if err != nil {
 			// If the team provided an Application Insights key, let's track that exception
@@ -447,8 +451,9 @@ func initAMQP10() {
 	}
 
 	// Open a session if we managed to get an amqpClient
+	log.Println("\tConnected to EventHub")	
 	if amqp10Client != nil {
-		log.Println("Creating a new AMQP session")		
+		log.Println("\tCreating a new AMQP session")		
 		amqp10Session, err = amqp10Client.NewSession()	
 		if err != nil {
 			// If the team provided an Application Insights key, let's track that exception
@@ -531,16 +536,12 @@ func addOrderToAMQP10(order Order) {
 		// Get an empty context
 		amqp10Context := context.Background()
 
-		// Include a random partition
-		rand.Seed(time.Now().UnixNano())
-		partitionKey := strconv.Itoa(random(0, 3))
-		targetAddress := fmt.Sprintf("%s/partitions/%s", eventHubName, partitionKey)
-
-		log.Printf("AMQP URL: %s, Target: %s", amqpURL, targetAddress)
+		log.Printf("AMQP URL: %s, Target: %s", amqpURL, eventHubName)
 
 		// Create a sender
+		log.Println("Creating AMQP sender")
 		sender, err := amqp10Session.NewSender(
-			amqp10.LinkTargetAddress(targetAddress),
+			amqp10.LinkTargetAddress(eventHubName),
 		)
 		if err != nil {
 			// If the team provided an Application Insights key, let's track that exception
@@ -556,11 +557,13 @@ func addOrderToAMQP10(order Order) {
 		// Send with retry logic (in case we get a amqp.DetachError)
 		err = try.Do(func(attempt int) (bool, error) {
 			var err error
-			
+
+			log.Println("Attempting to send the AMQP message: ", body)
 			err = sender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
 			if err != nil {
 				switch t := err.(type) {
 				default:
+					log.Println("Encountered an error sending AMQP. Will not retry: ", err)						
 					// If the team provided an Application Insights key, let's track that exception
 					if customTelemetryClient != nil {
 						customTelemetryClient.TrackException(err)
