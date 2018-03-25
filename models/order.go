@@ -584,7 +584,6 @@ func addOrderToAMQP10(order Order) {
 		// Cancel the context and close the sender
 		cancel()
 		sender.Close()
-		amqp10Session.Close()
 		
 		endTime := time.Now()
 
