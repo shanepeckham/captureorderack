@@ -59,6 +59,7 @@ var amqp091Queue amqp091.Queue
 // AMQP 1.0 variables
 var amqp10Client *amqp10.Client
 var amqp10Session *amqp10.Session
+var amqpSender *amqp10.Sender
 var eventHubName string
 
 // Application Insights telemetry clients
@@ -437,6 +438,7 @@ func initAMQP10() {
 				customTelemetryClient.TrackException(err)
 			}
 		}
+		//defer amqp10Client.Close()
 
 
 		// Open a session if we managed to get an amqpClient
@@ -451,6 +453,19 @@ func initAMQP10() {
 				}
 				log.Fatal("Creating AMQP session: ", err)
 			}
+		}
+
+		// Create a sender
+		log.Println("Creating AMQP sender")
+		amqpSender, err = amqp10Session.NewSender(
+			amqp10.LinkTargetAddress(eventHubName),
+		)
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+			log.Fatal("Creating sender link: ", err)
 		}
 
 		if err != nil {
@@ -539,19 +554,6 @@ func addOrderToAMQP10(order Order) {
 
 		log.Printf("AMQP URL: %s, Target: %s", amqpURL, eventHubName)
 
-		// Create a sender
-		log.Println("Creating AMQP sender")
-		sender, err := amqp10Session.NewSender(
-			amqp10.LinkTargetAddress(eventHubName),
-		)
-		if err != nil {
-			// If the team provided an Application Insights key, let's track that exception
-			if customTelemetryClient != nil {
-				customTelemetryClient.TrackException(err)
-			}
-			log.Fatal("Creating sender link: ", err)
-		}
-
 		// Prepare the context to timeout in 5 seconds
 		amqp10Context, cancel := context.WithTimeout(amqp10Context, 5*time.Second)
 
@@ -560,7 +562,7 @@ func addOrderToAMQP10(order Order) {
 			var err error
 
 			log.Println("Attempting to send the AMQP message: ", body)
-			err = sender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
+			err = amqpSender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
 			if err != nil {
 				switch t := err.(type) {
 				default:
@@ -584,7 +586,7 @@ func addOrderToAMQP10(order Order) {
 
 		// Cancel the context and close the sender
 		cancel()
-		sender.Close()
+		//sender.Close()
 		
 		endTime := time.Now()
 
