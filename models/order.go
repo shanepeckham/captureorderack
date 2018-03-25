@@ -95,13 +95,11 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 		order.Source = os.Getenv("SOURCE")
 	}
 
-	log.Print("Mongo URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
-
-	defer mongoDBSessionCopy.Close()
+	log.Print("Connecting Mongo URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
 
 	// insert Document in collection
 	mongoDBSessionError = mongoDBCollection.Insert(order)
-	log.Println("_id:", order)
+	log.Println("Inserted order:", order)
 
 	if mongoDBSessionError != nil {
 		// If the team provided an Application Insights key, let's track that exception
@@ -147,6 +145,8 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 			customTelemetryClient.Track(dependency)		
 		}
 	}
+
+	defer mongoDBSessionCopy.Close()
 
 	return order, mongoDBSessionError
 }
