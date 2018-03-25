@@ -451,12 +451,12 @@ func initAMQP10() {
 				if customTelemetryClient != nil {
 					customTelemetryClient.TrackException(err)
 				}
-				log.Fatal("Creating AMQP session: ", err)
+				log.Fatal("\t\tCreating AMQP session: ", err)
 			}
 		}
 
 		// Create a sender
-		log.Println("Creating AMQP sender")
+		log.Println("\tCreating AMQP sender")
 		amqpSender, err = amqp10Session.NewSender(
 			amqp10.LinkTargetAddress(eventHubName),
 		)
@@ -465,7 +465,7 @@ func initAMQP10() {
 			if customTelemetryClient != nil {
 				customTelemetryClient.TrackException(err)
 			}
-			log.Fatal("Creating sender link: ", err)
+			log.Fatal("\t\tCreating sender link: ", err)
 		}
 
 		if err != nil {
