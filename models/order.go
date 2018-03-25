@@ -239,7 +239,7 @@ func initMongoDial() (success bool, mErr error) {
 	if mongoSSL {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  10 * time.Second,
+			Timeout:  60 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
@@ -250,7 +250,7 @@ func initMongoDial() (success bool, mErr error) {
 	} else {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  10 * time.Second,
+			Timeout:  60 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
