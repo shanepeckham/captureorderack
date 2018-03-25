@@ -239,7 +239,7 @@ func initMongoDial() (success bool, mErr error) {
 	if mongoSSL {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  60 * time.Second,
+			Timeout:  10 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
@@ -250,7 +250,7 @@ func initMongoDial() (success bool, mErr error) {
 	} else {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  60 * time.Second,
+			Timeout:  10 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
@@ -372,7 +372,6 @@ func initAMQP() {
 }
 
 func initAMQP091() {
-
 	// Try to establish the connection to AMQP
 	// with retry logic
 	err := try.Do(func(attempt int) (bool, error) {
