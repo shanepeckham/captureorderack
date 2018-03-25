@@ -438,6 +438,21 @@ func initAMQP10() {
 			}
 		}
 
+
+		// Open a session if we managed to get an amqpClient
+		log.Println("\tConnected to EventHub")	
+		if amqp10Client != nil {
+			log.Println("\tCreating a new AMQP session")		
+			amqp10Session, err = amqp10Client.NewSession()	
+			if err != nil {
+				// If the team provided an Application Insights key, let's track that exception
+				if customTelemetryClient != nil {
+					customTelemetryClient.TrackException(err)
+				}
+				log.Fatal("Creating AMQP session: ", err)
+			}
+		}
+
 		if err != nil {
 			log.Println("Error connecting to EventHub instance. Will retry in 5 seconds:", err)
 		  	time.Sleep(5 * time.Second) // wait
@@ -523,20 +538,6 @@ func addOrderToAMQP10(order Order) {
 		amqp10Context := context.Background()
 
 		log.Printf("AMQP URL: %s, Target: %s", amqpURL, eventHubName)
-
-		// Open a session if we managed to get an amqpClient
-		log.Println("\tConnected to EventHub")	
-		if amqp10Client != nil {
-			log.Println("\tCreating a new AMQP session")		
-			amqp10Session, err = amqp10Client.NewSession()	
-			if err != nil {
-				// If the team provided an Application Insights key, let's track that exception
-				if customTelemetryClient != nil {
-					customTelemetryClient.TrackException(err)
-				}
-				log.Fatal("Creating AMQP session: ", err)
-			}
-		}
 
 		// Create a sender
 		log.Println("Creating AMQP sender")
