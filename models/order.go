@@ -239,7 +239,7 @@ func initMongoDial() (success bool, mErr error) {
 	if mongoSSL {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  60 * time.Second,
+			Timeout:  10 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
@@ -250,7 +250,7 @@ func initMongoDial() (success bool, mErr error) {
 	} else {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  60 * time.Second,
+			Timeout:  10 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
@@ -548,17 +548,30 @@ func addOrderToAMQP10(order Order) {
 		// Prepare the context to timeout in 5 seconds
 		amqp10Context, cancel := context.WithTimeout(amqp10Context, 5*time.Second)
 
-		// Send message
-		err = sender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
-		if err != nil {
-			// If the team provided an Application Insights key, let's track that exception
-			if customTelemetryClient != nil {
-				customTelemetryClient.TrackException(err)
+		// Send with retry logic (in case we get a amqp.DetachError)
+		err = try.Do(func(attempt int) (bool, error) {
+			var err error
+			
+			err = sender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
+			if err != nil {
+				switch t := err.(type) {
+				default:
+					// If the team provided an Application Insights key, let's track that exception
+					if customTelemetryClient != nil {
+						customTelemetryClient.TrackException(err)
+					}
+					// This is an unhandled error, don't retry
+					return false, err
+				case *amqp10.DetachError:
+					log.Println("EventHub detached. Will reconnect and retry: " , t, err)
+					initAMQP10()
+			   }
 			}
-			log.Println("Sending message:", err)
-		} else {
-			success = true
-		}
+			return attempt < 3, err
+		})
+
+		// Now check after possible retries if the message was sent
+		success = (err == nil)
 
 		// Cancel the context and close the sender
 		cancel()
