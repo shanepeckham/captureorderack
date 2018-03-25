@@ -372,6 +372,7 @@ func initAMQP() {
 }
 
 func initAMQP091() {
+	log.Println("InitAMQP091")				
 	// Try to establish the connection to AMQP
 	// with retry logic
 	err := try.Do(func(attempt int) (bool, error) {
@@ -419,6 +420,7 @@ func initAMQP091() {
 }
 
 func initAMQP10() {
+	log.Println("InitAMQP10")			
 	// Try to establish the connection to AMQP
 	// with retry logic
 	err := try.Do(func(attempt int) (bool, error) {
@@ -442,6 +444,19 @@ func initAMQP10() {
 	  // If we still can't connect
 	if err != nil {
 		log.Println("Couldn't connect to EventHub after 3 retries:", err)
+	}
+
+	// Open a session if we managed to get an amqpClient
+	if amqp10Client != nil {
+		log.Println("Creating a new AMQP session")		
+		amqp10Session, err = amqp10Client.NewSession()	
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+			log.Fatal("Creating AMQP session: ", err)
+		}
 	}
 }
 
@@ -512,16 +527,6 @@ func addOrderToAMQP10(order Order) {
 		var err error
 		startTime := time.Now()
 		body := fmt.Sprintf("{\"order\": \"%s\", \"source\": \"%s\"}", order.OrderID, teamName)
-
-		// Open a session
-		amqp10Session, err = amqp10Client.NewSession()	
-		if err != nil {
-			// If the team provided an Application Insights key, let's track that exception
-			if customTelemetryClient != nil {
-				customTelemetryClient.TrackException(err)
-			}
-			log.Fatal("Creating session: ", err)
-		}
 
 		// Get an empty context
 		amqp10Context := context.Background()
