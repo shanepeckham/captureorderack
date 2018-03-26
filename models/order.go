@@ -39,7 +39,7 @@ var challengeInsightsKey = os.Getenv("CHALLENGEAPPINSIGHTS_KEY")
 var mongoURL = os.Getenv("MONGOURL")
 var amqpURL = os.Getenv("AMQPURL")
 var teamName = os.Getenv("TEAMNAME")
-var mongoPoolLimit = 50
+var mongoPoolLimit = 25
 
 // MongoDB variables
 var mongoDBSession *mgo.Session
