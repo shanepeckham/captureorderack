@@ -283,6 +283,9 @@ func initMongoDial() (success bool, mErr error) {
 
 	mongoDBSession.SetMode(mgo.Monotonic, true)
 
+	// Limit connection pool to avoid running into Request Rate Too Large on CosmosDB
+	mongoDBSession.SetPoolLimit(50)
+
 	endTime := time.Now()
 	
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
