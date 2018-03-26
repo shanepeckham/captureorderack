@@ -41,9 +41,7 @@ var amqpURL = os.Getenv("AMQPURL")
 var teamName = os.Getenv("TEAMNAME")
 
 // MongoDB variables
-var mongoDBSessionCopy *mgo.Session
 var mongoDBSession *mgo.Session
-var mongoDBCollection *mgo.Collection
 var mongoDBSessionError error
 
 // MongoDB database and collection names
@@ -78,7 +76,8 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 	startTime := time.Now()
 
 	// Use the existing mongoDBSessionCopy
-	mongoDBSessionCopy = mongoDBSession.Copy()
+	mongoDBSessionCopy := mongoDBSession.Copy()
+	defer mongoDBSessionCopy.Close()
 
 	log.Println("Team " + teamName)
 
@@ -98,6 +97,7 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 	log.Print("Inserting into MongoDB URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
 
 	// insert Document in collection
+	mongoDBCollection := mongoDBSessionCopy.DB(mongoDatabaseName).C(mongoCollectionName)
 	mongoDBSessionError = mongoDBCollection.Insert(order)
 	log.Println("Inserted order:", order)
 
@@ -155,8 +155,6 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 			customTelemetryClient.Track(dependency)		
 		}
 	}
-
-	defer mongoDBSessionCopy.Close()
 
 	return order, mongoDBSessionError
 }
@@ -283,6 +281,8 @@ func initMongoDial() (success bool, mErr error) {
 		log.Println("\tConnected")		
 	}
 
+	mongoDBSession.SetMode(mgo.Monotonic, true)
+
 	endTime := time.Now()
 	
 	// Track the dependency, if the team provided an Application Insights key, let's track that dependency
@@ -330,7 +330,8 @@ func initMongo() {
 		os.Exit(1)
 	}
 
-	mongoDBSessionCopy = mongoDBSession.Copy()
+	mongoDBSessionCopy := mongoDBSession.Copy()
+	defer mongoDBSessionCopy.Close()
 		
 
 	// SetSafe changes the mongoDBSessionCopy safety mode.
@@ -362,9 +363,6 @@ func initMongo() {
 		log.Println("Created MongoDB collection: ")
 		log.Println(result)
 	}
-
-	// Get collection
-	mongoDBCollection = mongoDBSessionCopy.DB(mongoDatabaseName).C(mongoCollectionName)
 }
 
 // Initalize AMQP by figuring out where we are running
@@ -636,7 +634,7 @@ func addOrderToAMQP10(order Order) {
 			if err != nil {
 				dependency.ResultCode = err.Error()
 			}
-			
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)
 		}
