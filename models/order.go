@@ -95,7 +95,7 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 		order.Source = os.Getenv("SOURCE")
 	}
 
-	log.Print("Connecting Mongo URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
+	log.Print("Inserting into MongoDB URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
 
 	// insert Document in collection
 	mongoDBSessionError = mongoDBCollection.Insert(order)
@@ -131,7 +131,11 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 				"MongoDB",
 				mongoURL,
 				success)
-			dependency.Data = "Insert order"			
+			dependency.Data = "Insert order"		
+
+			if mongoDBSessionError != nil
+				dependency.ResultCode = mongoDBSessionError
+				
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)	
 		} else {
@@ -141,6 +145,10 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 				mongoURL,
 				success)
 			dependency.Data = "Insert order"	
+
+			if mongoDBSessionError != nil
+			dependency.ResultCode = mongoDBSessionError
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)		
 		}
@@ -283,7 +291,11 @@ func initMongoDial() (success bool, mErr error) {
 				"MongoDB",
 				mongoURL,
 				success)		
-				dependency.Data = "Create session"			
+				dependency.Data = "Create session"
+
+				if mongoDBSessionError != nil
+					dependency.ResultCode = mongoDBSessionError
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.TrackException(mongoDBSessionError)
 			customTelemetryClient.Track(dependency)
@@ -293,7 +305,11 @@ func initMongoDial() (success bool, mErr error) {
 				"MongoDB",
 				mongoURL,
 				success)		
-				dependency.Data = "Create session"			
+				dependency.Data = "Create session"
+
+				if mongoDBSessionError != nil
+					dependency.ResultCode = mongoDBSessionError	
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.TrackException(mongoDBSessionError)
 			customTelemetryClient.Track(dependency)
@@ -529,7 +545,11 @@ func addOrderToAMQP091(order Order) {
 				"AMQP",
 				amqpURL,
 				success)		
-				dependency.Data = "Send message"			
+				dependency.Data = "Send message"
+
+				if err != nil
+					dependency.ResultCode = err	
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)
 		}
@@ -607,6 +627,10 @@ func addOrderToAMQP10(order Order) {
 				amqpURL,
 				success)
 			dependency.Data = "Send message"		
+
+			if err != nil
+				dependency.ResultCode = err	
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)
 		}
