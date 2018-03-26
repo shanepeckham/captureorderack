@@ -39,6 +39,7 @@ var challengeInsightsKey = os.Getenv("CHALLENGEAPPINSIGHTS_KEY")
 var mongoURL = os.Getenv("MONGOURL")
 var amqpURL = os.Getenv("AMQPURL")
 var teamName = os.Getenv("TEAMNAME")
+var mongoPoolLimit = 50
 
 // MongoDB variables
 var mongoDBSession *mgo.Session
@@ -180,6 +181,15 @@ func init() {
 	validateVariable(amqpURL, "AMQPURL")
 	validateVariable(teamName, "TEAMNAME")
 
+	var mongoPoolLimitEnv = os.Getenv("MONGOPOOL_LIMIT")
+	if mongoPoolLimitEnv != "" {
+		if limit, err := strconv.Atoi(mongoPoolLimitEnv); err == nil {
+			mongoPoolLimit = limit
+		}
+	}
+	log.Printf("MongoDB pool limit set to %v. You can override by setting the MONGOPOOL_LIMIT environment variable." , mongoPoolLimit)
+	
+
 	// Initialize the Application Insights telemtry client(s)
 	challengeTelemetryClient = appinsights.NewTelemetryClient(challengeInsightsKey)
 	challengeTelemetryClient.Context().Tags.Cloud().SetRole("captureorder_golang")
@@ -284,7 +294,7 @@ func initMongoDial() (success bool, mErr error) {
 	mongoDBSession.SetMode(mgo.Monotonic, true)
 
 	// Limit connection pool to avoid running into Request Rate Too Large on CosmosDB
-	mongoDBSession.SetPoolLimit(50)
+	mongoDBSession.SetPoolLimit(mongoPoolLimit)
 
 	endTime := time.Now()
 	
