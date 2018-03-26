@@ -133,8 +133,9 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 				success)
 			dependency.Data = "Insert order"		
 
-			if mongoDBSessionError != nil
-				dependency.ResultCode = mongoDBSessionError
+			if mongoDBSessionError != nil {
+				dependency.ResultCode = mongoDBSessionError.Error()
+			}
 				
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)	
@@ -146,8 +147,9 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 				success)
 			dependency.Data = "Insert order"	
 
-			if mongoDBSessionError != nil
-			dependency.ResultCode = mongoDBSessionError
+			if mongoDBSessionError != nil {
+				dependency.ResultCode = mongoDBSessionError.Error()
+			}
 
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)		
@@ -293,8 +295,9 @@ func initMongoDial() (success bool, mErr error) {
 				success)		
 				dependency.Data = "Create session"
 
-				if mongoDBSessionError != nil
-					dependency.ResultCode = mongoDBSessionError
+				if mongoDBSessionError != nil {
+					dependency.ResultCode = mongoDBSessionError.Error()
+				}
 
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.TrackException(mongoDBSessionError)
@@ -307,8 +310,9 @@ func initMongoDial() (success bool, mErr error) {
 				success)		
 				dependency.Data = "Create session"
 
-				if mongoDBSessionError != nil
-					dependency.ResultCode = mongoDBSessionError	
+				if mongoDBSessionError != nil {
+					dependency.ResultCode = mongoDBSessionError	.Error()
+				}
 
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.TrackException(mongoDBSessionError)
@@ -547,8 +551,9 @@ func addOrderToAMQP091(order Order) {
 				success)		
 				dependency.Data = "Send message"
 
-				if err != nil
-					dependency.ResultCode = err	
+				if err != nil {
+					dependency.ResultCode = err.Error()
+				}
 
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)
@@ -628,9 +633,10 @@ func addOrderToAMQP10(order Order) {
 				success)
 			dependency.Data = "Send message"		
 
-			if err != nil
-				dependency.ResultCode = err	
-
+			if err != nil {
+				dependency.ResultCode = err.Error()
+			}
+			
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)
 		}
