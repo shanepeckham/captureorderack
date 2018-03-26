@@ -39,11 +39,10 @@ var challengeInsightsKey = os.Getenv("CHALLENGEAPPINSIGHTS_KEY")
 var mongoURL = os.Getenv("MONGOURL")
 var amqpURL = os.Getenv("AMQPURL")
 var teamName = os.Getenv("TEAMNAME")
+var mongoPoolLimit = 25
 
 // MongoDB variables
-var mongoDBSessionCopy *mgo.Session
 var mongoDBSession *mgo.Session
-var mongoDBCollection *mgo.Collection
 var mongoDBSessionError error
 
 // MongoDB database and collection names
@@ -59,6 +58,7 @@ var amqp091Queue amqp091.Queue
 // AMQP 1.0 variables
 var amqp10Client *amqp10.Client
 var amqp10Session *amqp10.Session
+var amqpSender *amqp10.Sender
 var eventHubName string
 
 // Application Insights telemetry clients
@@ -72,12 +72,13 @@ var db string // CosmosDB or MongoDB?
 var queueType string // EventHub or RabbitMQ
 
 // AddOrderToMongoDB Adds the order to MongoDB/CosmosDB
-func AddOrderToMongoDB(order Order) Order {
+func AddOrderToMongoDB(order Order) (Order, error) {
 	success := false
 	startTime := time.Now()
 
 	// Use the existing mongoDBSessionCopy
-	mongoDBSessionCopy = mongoDBSession.Copy()
+	mongoDBSessionCopy := mongoDBSession.Copy()
+	defer mongoDBSessionCopy.Close()
 
 	log.Println("Team " + teamName)
 
@@ -94,13 +95,12 @@ func AddOrderToMongoDB(order Order) Order {
 		order.Source = os.Getenv("SOURCE")
 	}
 
-	log.Print("Mongo URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
-
-	defer mongoDBSessionCopy.Close()
+	log.Print("Inserting into MongoDB URL: ", mongoURL, " CosmosDB: ", isCosmosDb)
 
 	// insert Document in collection
+	mongoDBCollection := mongoDBSessionCopy.DB(mongoDatabaseName).C(mongoCollectionName)
 	mongoDBSessionError = mongoDBCollection.Insert(order)
-	log.Println("_id:", order)
+	log.Println("Inserted order:", order)
 
 	if mongoDBSessionError != nil {
 		// If the team provided an Application Insights key, let's track that exception
@@ -132,7 +132,12 @@ func AddOrderToMongoDB(order Order) Order {
 				"MongoDB",
 				mongoURL,
 				success)
-			dependency.Data = "Insert order"			
+			dependency.Data = "Insert order"		
+
+			if mongoDBSessionError != nil {
+				dependency.ResultCode = mongoDBSessionError.Error()
+			}
+				
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)	
 		} else {
@@ -142,12 +147,17 @@ func AddOrderToMongoDB(order Order) Order {
 				mongoURL,
 				success)
 			dependency.Data = "Insert order"	
+
+			if mongoDBSessionError != nil {
+				dependency.ResultCode = mongoDBSessionError.Error()
+			}
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)		
 		}
 	}
 
-	return order
+	return order, mongoDBSessionError
 }
 
 // AddOrderToAMQP Adds the order to AMQP (EventHub/RabbitMQ)
@@ -170,6 +180,15 @@ func init() {
 	validateVariable(mongoURL, "MONGOURL")
 	validateVariable(amqpURL, "AMQPURL")
 	validateVariable(teamName, "TEAMNAME")
+
+	var mongoPoolLimitEnv = os.Getenv("MONGOPOOL_LIMIT")
+	if mongoPoolLimitEnv != "" {
+		if limit, err := strconv.Atoi(mongoPoolLimitEnv); err == nil {
+			mongoPoolLimit = limit
+		}
+	}
+	log.Printf("MongoDB pool limit set to %v. You can override by setting the MONGOPOOL_LIMIT environment variable." , mongoPoolLimit)
+	
 
 	// Initialize the Application Insights telemtry client(s)
 	challengeTelemetryClient = appinsights.NewTelemetryClient(challengeInsightsKey)
@@ -239,7 +258,7 @@ func initMongoDial() (success bool, mErr error) {
 	if mongoSSL {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  60 * time.Second,
+			Timeout:  10 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
@@ -250,7 +269,7 @@ func initMongoDial() (success bool, mErr error) {
 	} else {
 		dialInfo = &mgo.DialInfo{
 			Addrs:    []string{mongoHost},
-			Timeout:  60 * time.Second,
+			Timeout:  10 * time.Second,
 			Database: mongoDatabase, // It can be anything
 			Username: mongoUsername, // Username
 			Password: mongoPassword, // Password
@@ -262,13 +281,20 @@ func initMongoDial() (success bool, mErr error) {
 	success = false
 	startTime := time.Now()
 
+	log.Println("Attempting to connect to MongoDB")
 	mongoDBSession, mongoDBSessionError = mgo.DialWithInfo(dialInfo)
 	if mongoDBSessionError != nil {
 		log.Println(fmt.Sprintf("Can't connect to mongo at [%s], go error: ", mongoURL), mongoDBSessionError)
 		mErr = mongoDBSessionError
 	} else {
 		success = true
+		log.Println("\tConnected")		
 	}
+
+	mongoDBSession.SetMode(mgo.Monotonic, true)
+
+	// Limit connection pool to avoid running into Request Rate Too Large on CosmosDB
+	mongoDBSession.SetPoolLimit(mongoPoolLimit)
 
 	endTime := time.Now()
 	
@@ -280,7 +306,12 @@ func initMongoDial() (success bool, mErr error) {
 				"MongoDB",
 				mongoURL,
 				success)		
-				dependency.Data = "Create session"			
+				dependency.Data = "Create session"
+
+				if mongoDBSessionError != nil {
+					dependency.ResultCode = mongoDBSessionError.Error()
+				}
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.TrackException(mongoDBSessionError)
 			customTelemetryClient.Track(dependency)
@@ -290,7 +321,12 @@ func initMongoDial() (success bool, mErr error) {
 				"MongoDB",
 				mongoURL,
 				success)		
-				dependency.Data = "Create session"			
+				dependency.Data = "Create session"
+
+				if mongoDBSessionError != nil {
+					dependency.ResultCode = mongoDBSessionError	.Error()
+				}
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.TrackException(mongoDBSessionError)
 			customTelemetryClient.Track(dependency)
@@ -307,7 +343,8 @@ func initMongo() {
 		os.Exit(1)
 	}
 
-	mongoDBSessionCopy = mongoDBSession.Copy()
+	mongoDBSessionCopy := mongoDBSession.Copy()
+	defer mongoDBSessionCopy.Close()
 		
 
 	// SetSafe changes the mongoDBSessionCopy safety mode.
@@ -339,9 +376,6 @@ func initMongo() {
 		log.Println("Created MongoDB collection: ")
 		log.Println(result)
 	}
-
-	// Get collection
-	mongoDBCollection = mongoDBSessionCopy.DB(mongoDatabaseName).C(mongoCollectionName)
 }
 
 // Initalize AMQP by figuring out where we are running
@@ -369,10 +403,11 @@ func initAMQP() {
 		initAMQP091()
 	}
 	log.Println("\tAMQP URL: " + amqpURL)
+	log.Println("** READY TO TAKE ORDERS **")
 }
 
 func initAMQP091() {
-
+	log.Println("Attempting to connect to RabbitMQ")				
 	// Try to establish the connection to AMQP
 	// with retry logic
 	err := try.Do(func(attempt int) (bool, error) {
@@ -397,7 +432,7 @@ func initAMQP091() {
 	if err != nil {
 		log.Println("Couldn't connect to Rabbit after 3 retries:", err)
 	} else {
-		log.Println("Connected to RabbitMQ. Establishing Channel and Queue")
+		log.Println("\tConnected to RabbitMQ. Establishing Channel and Queue")
 		
 		// Otherwise, let's continue and establish the channel and queue
 		amqp091Channel, err = amqp091Client.Channel()
@@ -419,18 +454,49 @@ func initAMQP091() {
 	}
 }
 
-func initAMQP10() {
+func initAMQP10() {			
+				
 	// Try to establish the connection to AMQP
 	// with retry logic
 	err := try.Do(func(attempt int) (bool, error) {
 		var err error
 		
+		log.Println("Attempting to connect to EventHub")	
 		amqp10Client, err = amqp10.Dial(amqpURL)
 		if err != nil {
 			// If the team provided an Application Insights key, let's track that exception
 			if customTelemetryClient != nil {
 				customTelemetryClient.TrackException(err)
 			}
+		}
+		//defer amqp10Client.Close()
+
+
+		// Open a session if we managed to get an amqpClient
+		log.Println("\tConnected to EventHub")	
+		if amqp10Client != nil {
+			log.Println("\tCreating a new AMQP session")		
+			amqp10Session, err = amqp10Client.NewSession()	
+			if err != nil {
+				// If the team provided an Application Insights key, let's track that exception
+				if customTelemetryClient != nil {
+					customTelemetryClient.TrackException(err)
+				}
+				log.Fatal("\t\tCreating AMQP session: ", err)
+			}
+		}
+
+		// Create a sender
+		log.Println("\tCreating AMQP sender")
+		amqpSender, err = amqp10Session.NewSender(
+			amqp10.LinkTargetAddress(eventHubName),
+		)
+		if err != nil {
+			// If the team provided an Application Insights key, let's track that exception
+			if customTelemetryClient != nil {
+				customTelemetryClient.TrackException(err)
+			}
+			log.Fatal("\t\tCreating sender link: ", err)
 		}
 
 		if err != nil {
@@ -494,7 +560,12 @@ func addOrderToAMQP091(order Order) {
 				"AMQP",
 				amqpURL,
 				success)		
-				dependency.Data = "Send message"			
+				dependency.Data = "Send message"
+
+				if err != nil {
+					dependency.ResultCode = err.Error()
+				}
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)
 		}
@@ -514,56 +585,44 @@ func addOrderToAMQP10(order Order) {
 		startTime := time.Now()
 		body := fmt.Sprintf("{\"order\": \"%s\", \"source\": \"%s\"}", order.OrderID, teamName)
 
-		// Open a session
-		amqp10Session, err = amqp10Client.NewSession()	
-		if err != nil {
-			// If the team provided an Application Insights key, let's track that exception
-			if customTelemetryClient != nil {
-				customTelemetryClient.TrackException(err)
-			}
-			log.Fatal("Creating session: ", err)
-		}
-
 		// Get an empty context
 		amqp10Context := context.Background()
 
-		// Include a random partition
-		rand.Seed(time.Now().UnixNano())
-		partitionKey := strconv.Itoa(random(0, 3))
-		targetAddress := fmt.Sprintf("%s/partitions/%s", eventHubName, partitionKey)
-
-		log.Printf("AMQP URL: %s, Target: %s", amqpURL, targetAddress)
-
-		// Create a sender
-		sender, err := amqp10Session.NewSender(
-			amqp10.LinkTargetAddress(targetAddress),
-		)
-		if err != nil {
-			// If the team provided an Application Insights key, let's track that exception
-			if customTelemetryClient != nil {
-				customTelemetryClient.TrackException(err)
-			}
-			log.Fatal("Creating sender link: ", err)
-		}
+		log.Printf("AMQP URL: %s, Target: %s", amqpURL, eventHubName)
 
 		// Prepare the context to timeout in 5 seconds
 		amqp10Context, cancel := context.WithTimeout(amqp10Context, 5*time.Second)
 
-		// Send message
-		err = sender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
-		if err != nil {
-			// If the team provided an Application Insights key, let's track that exception
-			if customTelemetryClient != nil {
-				customTelemetryClient.TrackException(err)
+		// Send with retry logic (in case we get a amqp.DetachError)
+		err = try.Do(func(attempt int) (bool, error) {
+			var err error
+
+			log.Println("Attempting to send the AMQP message: ", body)
+			err = amqpSender.Send(amqp10Context, amqp10.NewMessage([]byte(body)))
+			if err != nil {
+				switch t := err.(type) {
+				default:
+					log.Println("Encountered an error sending AMQP. Will not retry: ", err)						
+					// If the team provided an Application Insights key, let's track that exception
+					if customTelemetryClient != nil {
+						customTelemetryClient.TrackException(err)
+					}
+					// This is an unhandled error, don't retry
+					return false, err
+				case *amqp10.DetachError:
+					log.Println("EventHub detached. Will reconnect and retry: " , t, err)
+					initAMQP10()
+			   }
 			}
-			log.Println("Sending message:", err)
-		} else {
-			success = true
-		}
+			return attempt < 3, err
+		})
+
+		// Now check after possible retries if the message was sent
+		success = (err == nil)
 
 		// Cancel the context and close the sender
 		cancel()
-		sender.Close()
+		//sender.Close()
 		
 		endTime := time.Now()
 
@@ -584,6 +643,11 @@ func addOrderToAMQP10(order Order) {
 				amqpURL,
 				success)
 			dependency.Data = "Send message"		
+
+			if err != nil {
+				dependency.ResultCode = err.Error()
+			}
+
 			dependency.MarkTime(startTime, endTime)
 			customTelemetryClient.Track(dependency)
 		}

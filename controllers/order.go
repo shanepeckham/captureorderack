@@ -25,12 +25,18 @@ func (this *OrderController) Post() {
 
 
 	// Add the order to MongoDB
-	addedOrder := models.AddOrderToMongoDB(ob)
+	addedOrder, err := models.AddOrderToMongoDB(ob)
 
-	// Add the order to AMQP
-	models.AddOrderToAMQP(addedOrder)
+	if err == nil {
+		// Add the order to AMQP
+		models.AddOrderToAMQP(addedOrder)
 
-	// return
-	this.Data["json"] = map[string]string{"orderId": addedOrder.OrderID}
+		// return
+		this.Data["json"] = map[string]string{"orderId": addedOrder.OrderID}
+	} else {
+		this.Data["json"] = map[string]string{"error": "order not added to MongoDB. Check logs: " + err.Error()}
+		this.Ctx.Output.SetStatus(500)
+	}
+	
 	this.ServeJSON()
 }
