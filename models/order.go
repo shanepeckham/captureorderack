@@ -144,6 +144,8 @@ func init() {
 		database = st[:co]
 		password = st[co+1:]
 		log.Print("db ", database, " pwd ", password)
+	} else {
+		database = "orders"
 	}
 
 	// DialInfo holds options for establishing a session with a MongoDB cluster.
@@ -163,7 +165,7 @@ func init() {
 	if isAzure == true {
 		asession, serr = mgo.DialWithInfo(dialInfo)
 		if serr != nil {
-			log.Fatal("Can't connect to CosmosDB, go error", serr)
+			log.Fatal("Can't connect to CosmosDB, go error ", serr)
 			status = "Can't connect to CosmosDB, go error %v\n"
 			os.Exit(1)
 		}
