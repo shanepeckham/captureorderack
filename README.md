@@ -1,3 +1,5 @@
+[![CircleCI](https://circleci.com/gh/shanepeckham/captureorderack/tree/master.svg?style=svg)](https://circleci.com/gh/shanepeckham/captureorderack/tree/master)
+
 # CaptureOrder  - TACK
 
 A containerised Go swagger API to capture orders, write them to MongoDb.
