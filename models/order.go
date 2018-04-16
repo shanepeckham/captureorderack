@@ -119,7 +119,7 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 		// Track the event for the challenge purposes
 		eventTelemetry := appinsights.NewEventTelemetry("CapureOrder: - Team Name " + teamName + " db " + db)
 		eventTelemetry.Properties["team"] = teamName
-		eventTelemetry.Properties["challenge"] = "captureorder"
+		eventTelemetry.Properties["challenge"] = "1-captureorder"
 		eventTelemetry.Properties["type"] = db
 		challengeTelemetryClient.Track(eventTelemetry)
 	}
@@ -548,7 +548,7 @@ func addOrderToAMQP091(order Order) {
 			// Track the event for the challenge purposes
 			eventTelemetry := appinsights.NewEventTelemetry("SendOrder: - Team Name " + teamName + " - RabbitMQ")
 			eventTelemetry.Properties["team"] = teamName
-			eventTelemetry.Properties["challenge"] = "sendorder"
+			eventTelemetry.Properties["challenge"] = "2-sendmessage"
 			eventTelemetry.Properties["type"] = "rabbitmq"
 			challengeTelemetryClient.Track(eventTelemetry)
 		}
@@ -630,7 +630,7 @@ func addOrderToAMQP10(order Order) {
 			// Track the event for the challenge purposes
 			eventTelemetry := appinsights.NewEventTelemetry("SendOrder: - Team Name " + teamName + " - EventHub")
 			eventTelemetry.Properties["team"] = teamName
-			eventTelemetry.Properties["challenge"] = "sendorder"
+			eventTelemetry.Properties["challenge"] = "2-sendmessage"
 			eventTelemetry.Properties["type"] = "eventhub"
 			challengeTelemetryClient.Track(eventTelemetry)
 		}
