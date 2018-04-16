@@ -50,6 +50,7 @@
         "EmailAddress",
         "PreferredLanguage",
         "Product",
+        "Partition",
         "Total",
         "Source",
         "Status"
@@ -70,6 +71,10 @@
         },
         "Product": {
           "description": "Product ordered by the customer",
+          "type": "string"
+        },
+        "Partition": {
+          "description": "MongoDB partition. Generated.",
           "type": "string"
         },
         "Source": {

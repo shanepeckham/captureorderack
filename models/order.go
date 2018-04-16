@@ -28,6 +28,7 @@ type Order struct {
 	EmailAddress      string  `required:"true" description:"Email address of the customer"`
 	PreferredLanguage string  `required:"false" description:"Preferred Language of the customer"`
 	Product           string  `required:"false" description:"Product ordered by the customer"`
+	Partition         string  `required:"false" description:"MongoDB Partition. Generated."`
 	Total             float64 `required:"false" description:"Order total"`
 	Source            string  `required:"false" description:"Source backend e.g. App Service, Container instance, K8 cluster etc"`
 	Status            string  `required:"true" description:"Order Status"`
@@ -48,7 +49,7 @@ var mongoDBSessionError error
 // MongoDB database and collection names
 var mongoDatabaseName = "k8orders"
 var mongoCollectionName = "orders"
-var mongoCollectionShardKey = "product"
+var mongoCollectionShardKey = "partition"
 
 // AMQP 0.9.1 variables
 var amqp091Client *amqp091.Connection
@@ -85,7 +86,7 @@ func AddOrderToMongoDB(order Order) (Order, error) {
 	// Select a random partition
 	rand.Seed(time.Now().UnixNano())
 	partitionKey := strconv.Itoa(random(0, 11))
-	order.Product = fmt.Sprintf("product-%s", partitionKey)
+	order.Partition = fmt.Sprintf("partition-%s", partitionKey)
 
 	NewOrderID := bson.NewObjectId()
 	order.OrderID = NewOrderID.Hex()
